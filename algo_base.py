@@ -367,7 +367,7 @@ def draw_gost_level_mark(msp, pt: Vec3, prj_val: float, fact_val: float, scale: 
     msp.add_text(f"{fact_val:+.3f}", dxfattribs={'layer': 'ИС_Высотные_Отметки', 'height': th, 'color': COLOR_FACT, 'style': 'ГОСТ_2.304'}).set_placement((pt.x + 0.5 * scale, base_y + tri_h - 0.5 * scale), align=TextEntityAlignment.TOP_LEFT)
 
 
-def draw_coordinate_table(msp, x_pos: float, y_pos: float, points_data: List[Dict[str, Any]], scale: float) -> float:
+def draw_coordinate_table(msp, x_pos: float, y_pos: float, points_data: List[Dict[str, Any]], scale: float = 1.0) -> float:
     col_widths = [12.0 * scale, 25.0 * scale, 25.0 * scale, 25.0 * scale, 25.0 * scale]
     row_h = 6.0 * scale
     th = 2.5 * scale

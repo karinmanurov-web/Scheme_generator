@@ -113,7 +113,7 @@ def clean_format_text(txt: str) -> str:
 def extract_valid_geometry(source_msp, source_doc) -> Tuple[List[Any], List[Dict[str, Any]], List[Dict[str, Any]]]:
     extracted_elements, extracted_dims, extracted_levels = [], [], []
 
-    excluded_layer_keywords = {'defpoints', 'dim', 'размер', 'штамп', 'рамка', 'frame', 'stamp', 'title'}
+    excluded_layer_keywords = {'defpoints', 'штамп', 'рамка', 'frame', 'stamp', 'title'}
     pile_keywords = {'свая', 'сваи', 'pile', 'ось_свай', 'wipeout'}
 
     def is_excluded_layer(lname):

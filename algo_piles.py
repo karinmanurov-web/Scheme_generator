@@ -180,7 +180,7 @@ def draw_fractional_dimension(msp, dim_info: Dict[str, Any], scale: float) -> No
     msp.add_text(str_fact, dxfattribs={'style': 'ГОСТ_2.304', 'height': text_h, 'layer': 'ИСП_Размеры_Факт', 'color': COLOR_FACT, 'rotation': text_deg}).set_placement(fct_pos, align=TextEntityAlignment.MIDDLE_CENTER)
 
 
-def draw_coordinate_table(msp, x_pos: float, y_pos: float, points_data: List[Dict[str, Any]], scale: float) -> float:
+def draw_coordinate_table(msp, x_pos: float, y_pos: float, points_data: List[Dict[str, Any]], scale: float = 1.0) -> float:
     col_widths = [12.0 * scale, 25.0 * scale, 25.0 * scale, 25.0 * scale, 25.0 * scale]
     row_h = 6.0 * scale
     th = 2.5 * scale
