@@ -18,6 +18,20 @@ from ezdxf.math import BoundingBox, Vec3
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
+
+def safe_extents(msp) -> ezdxf_bbox.BoundingBox:
+    box = ezdxf_bbox.BoundingBox()
+    for ent in msp:
+        try:
+            if ent.dxftype() == 'INSERT' and ent.dxf.name not in msp.doc.blocks:
+                continue
+            ent_box = ezdxf_bbox.extents([ent])
+            if ent_box.has_data:
+                box.extend([ent_box.extmin, ent_box.extmax])
+        except Exception:
+            pass
+    return box
+
 ALGORITHM_NAME = "Подбетонка"
 PREVIEW_IMAGE = "preview_base.png"
 
@@ -81,6 +95,7 @@ def find_scale_annotations(msp) -> List[Dict[str, Any]]:
 
 
 def get_nearest_scale_factor(pt: Vec3, scale_annotations: List[Dict[str, Any]], global_scale: float) -> float:
+    return global_scale
     if not scale_annotations:
         return global_scale
     best_scale = global_scale
@@ -533,7 +548,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
                 })
 
     # Отрисовка стандартной рамки ГОСТ и штампа
-    all_bbox = ezdxf_bbox.extents(msp)
+    all_bbox = safe_extents(msp)
     if not all_bbox.has_data:
         all_bbox = bbox
 

@@ -18,6 +18,20 @@ from ezdxf.math import BoundingBox, Vec3
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
+
+def safe_extents(msp) -> ezdxf_bbox.BoundingBox:
+    box = ezdxf_bbox.BoundingBox()
+    for ent in msp:
+        try:
+            if ent.dxftype() == 'INSERT' and ent.dxf.name not in msp.doc.blocks:
+                continue
+            ent_box = ezdxf_bbox.extents([ent])
+            if ent_box.has_data:
+                box.extend([ent_box.extmin, ent_box.extmax])
+        except Exception:
+            pass
+    return box
+
 ALGORITHM_NAME = "Свайный фундамент"
 PREVIEW_IMAGE = "preview_piles.png"
 
@@ -547,7 +561,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         draw_fractional_dimension(msp_out, dim_info, global_scale)
 
     # Пересчет bbox после отрисовки размеров
-    all_bbox = ezdxf_bbox.extents(msp_out)
+    all_bbox = safe_extents(msp_out)
     if not all_bbox.has_data:
         all_bbox = bbox
 

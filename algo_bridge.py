@@ -18,6 +18,20 @@ from ezdxf.math import BoundingBox, Vec3
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
+
+def safe_extents(msp) -> ezdxf_bbox.BoundingBox:
+    box = ezdxf_bbox.BoundingBox()
+    for ent in msp:
+        try:
+            if ent.dxftype() == 'INSERT' and ent.dxf.name not in msp.doc.blocks:
+                continue
+            ent_box = ezdxf_bbox.extents([ent])
+            if ent_box.has_data:
+                box.extend([ent_box.extmin, ent_box.extmax])
+        except Exception:
+            pass
+    return box
+
 ALGORITHM_NAME = "Пролетное строение"
 PREVIEW_IMAGE = "preview_bridge.png"
 
@@ -80,6 +94,7 @@ def find_scale_annotations(msp) -> List[Dict[str, Any]]:
 
 
 def get_nearest_scale_factor(pt: Vec3, scale_annotations: List[Dict[str, Any]], global_scale: float) -> float:
+    return global_scale
     if not scale_annotations:
         return global_scale
     min_dist = float('inf')
@@ -377,7 +392,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
 
     # Вычисление чистого габаритного контейнера моста
     try:
-        bbox = ezdxf_bbox.extents(out_msp)
+        bbox = safe_extents(out_msp)
     except Exception:
         bbox = BoundingBox([Vec3(0, 0, 0), Vec3(1000, 1000, 0)])
 

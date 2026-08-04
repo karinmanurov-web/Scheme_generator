@@ -18,6 +18,20 @@ from ezdxf.math import BoundingBox, Vec3
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
+
+def safe_extents(msp) -> ezdxf_bbox.BoundingBox:
+    box = ezdxf_bbox.BoundingBox()
+    for ent in msp:
+        try:
+            if ent.dxftype() == 'INSERT' and ent.dxf.name not in msp.doc.blocks:
+                continue
+            ent_box = ezdxf_bbox.extents([ent])
+            if ent_box.has_data:
+                box.extend([ent_box.extmin, ent_box.extmax])
+        except Exception:
+            pass
+    return box
+
 ALGORITHM_NAME = "Откосные стенки"
 PREVIEW_IMAGE = "preview_walls.png"
 
@@ -415,7 +429,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
             new_msp.add_circle(el[1], radius=el[2], dxfattribs={'layer': el[3]})
 
     try:
-        bbox = ezdxf_bbox.extents(new_msp)
+        bbox = safe_extents(new_msp)
     except Exception:
         bbox = BoundingBox([Vec3(0, 0, 0), Vec3(1000, 1000, 0)])
 
@@ -430,7 +444,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     for lvl in levels:
         draw_level_mark(new_msp, lvl, scale=global_scale)
 
-    all_bbox = ezdxf_bbox.extents(new_msp)
+    all_bbox = safe_extents(new_msp)
     if not all_bbox.has_data:
         all_bbox = bbox
 
