@@ -15,7 +15,6 @@ import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.math import BoundingBox, Vec3
-from algo_packer import cluster_and_pack_geometry
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
@@ -465,6 +464,17 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     for lname, color in {'Сваи_Проект': COLOR_MAIN, 'Оси_Проект': COLOR_MAIN, 'Исполнительная_Номера': COLOR_MAIN, 'Исполнительная_Размеры': COLOR_MAIN, 'Исполнительная_Отклонения': COLOR_FACT, 'Исполнительная_Ростверк': COLOR_BASE, 'Исполнительная_Оси_Опор': COLOR_FACT, 'Исполнительная_Оформление': COLOR_MAIN, 'ИСП_Текст': COLOR_MAIN, 'ИСП_Таблица': COLOR_MAIN}.items():
         doc_out.layers.new(lname, dxfattribs={'color': color})
 
+    # Копирование остальной геометрии (ростверки, контуры), кроме размеров и текста
+    for ent in msp_in:
+        etype = ent.dxftype()
+        layer = ent.dxf.layer if hasattr(ent.dxf, 'layer') else ''
+        if etype not in ('DIMENSION', 'TEXT', 'MTEXT') and layer.lower() not in ('defpoints', 'рамка', 'штамп', 'оформление'):
+            try:
+                msp_out.add_entity(ent.copy())
+            except Exception:
+                pass
+    
+
     hw = SIZES['pile_size'] / 2.0
     final_report = []
 
@@ -554,20 +564,13 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     table_x = in_x_max - 112.0 * global_scale
     table_y = in_y_max - 10.0 * global_scale
     if final_report:
-        draw_coordinate_table(msp_out, table_x, table_y, final_report)
+        draw_coordinate_table(msp_out, table_x, table_y, final_report, scale=global_scale)
 
     # Примечания и условные обозначения над штампом (без наслоений)
     draw_notes_and_legend(msp_out, stamp_x0, stamp_y0 + 60.0 * global_scale, scale=global_scale)
 
 
-    # Упаковка геометрии, масштабирование под рамку А3
-    stamp_w = 185.0
-    stamp_h = 55.0
-    try:
-        if 'in_x_min' in locals() and 'in_y_min' in locals():
-            cluster_and_pack_geometry(msp_out, in_x_min, in_y_min, in_x_max, in_y_max, stamp_w, stamp_h)
-    except Exception as e:
-        _log(f"[ОШИБКА УПАКОВКИ] {e}", log_callback)
+
     try:
         doc_out.saveas(output_path)
         _log(f"[УСПЕХ] Исполнительная схема свайного фундамента успешно создана: {output_path}", log_callback)

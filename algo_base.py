@@ -15,7 +15,6 @@ from ezdxf import bbox as ezdxf_bbox
 from ezdxf.addons import Importer
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.math import BoundingBox, Vec3
-from algo_packer import cluster_and_pack_geometry
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
@@ -550,21 +549,14 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     table_y = in_y_max - 10.0 * global_scale
 
     if points_catalog:
-        draw_coordinate_table(msp, table_x, table_y, points_catalog)
+        draw_coordinate_table(msp, table_x, table_y, points_catalog, scale=global_scale)
 
     # Примечания и условные обозначения над штампом
     draw_notes(msp, stamp_x0, stamp_y0 + 65.0 * global_scale + 25.0 * global_scale, global_scale)
     draw_legend_block(msp, stamp_x0, stamp_y0 + 65.0 * global_scale, global_scale)
 
 
-    # Упаковка геометрии, масштабирование под рамку А3
-    stamp_w = 185.0
-    stamp_h = 55.0
-    try:
-        if 'in_x_min' in locals() and 'in_y_min' in locals():
-            cluster_and_pack_geometry(msp, in_x_min, in_y_min, in_x_max, in_y_max, stamp_w, stamp_h)
-    except Exception as e:
-        _log(f"[ОШИБКА УПАКОВКИ] {e}", log_callback)
+
     try:
         out_doc.saveas(output_path)
         _log(f"[УСПЕХ] Исполнительная схема подбетонки успешно сохранена: {output_path}", log_callback)

@@ -15,7 +15,6 @@ from ezdxf import bbox as ezdxf_bbox
 from ezdxf.addons import importer
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.math import BoundingBox, Vec3
-from algo_packer import cluster_and_pack_geometry
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
@@ -332,10 +331,14 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     out_doc = ezdxf.new('R2010')
     setup_gost_environment(out_doc)
 
-    imp = importer.Importer(src_doc, out_doc)
-    imp.import_modelspace()
-    imp.finalize()
+# Copying entities instead of using importer to avoid ACDB_BLOCKREPRESENTATION_DATA warnings
     out_msp = out_doc.modelspace()
+    for ent in src_msp:
+        try:
+            if ent.dxftype() not in ('ACDB_BLOCKREPRESENTATION_DATA', 'DICTIONARY'):
+                out_msp.add_entity(ent.copy())
+        except Exception:
+            pass
 
     # Очистка посторонних элементов и перекраска всей конструкции в строго монохромный ГОСТ слой (COLOR_MAIN = 7)
     entities_to_delete = []
@@ -396,14 +399,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     draw_area_calc_table(out_msp, table_x + 50.0 * scale, table_y - 20.0 * scale, scale)
 
 
-    # Упаковка геометрии, масштабирование под рамку А3
-    stamp_w = 185.0
-    stamp_h = 55.0
-    try:
-        if 'in_x_min' in locals() and 'in_y_min' in locals():
-            cluster_and_pack_geometry(out_msp, in_x_min, in_y_min, in_x_max, in_y_max, stamp_w, stamp_h)
-    except Exception as e:
-        _log(f"[ОШИБКА УПАКОВКИ] {e}", log_callback)
+
     try:
         out_doc.saveas(output_path)
         _log(f"[УСПЕХ] Исполнительный чертеж моста успешно сформирован: {output_path}", log_callback)

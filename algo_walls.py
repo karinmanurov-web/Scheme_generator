@@ -15,7 +15,6 @@ import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 from ezdxf.enums import TextEntityAlignment
 from ezdxf.math import BoundingBox, Vec3
-from algo_packer import cluster_and_pack_geometry
 
 from algo_stamp import draw_gost_frame_and_stamp, draw_gost_stamp
 
@@ -443,7 +442,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     stamp_x0 = in_x_max - stamp_w
     stamp_y0 = in_y_min
 
-    doc_title = (stamp_data.get('doc_title') or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper()
+    doc_title = ((stamp_data or {}).get('doc_title') or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper()
     new_msp.add_text(
         doc_title,
         dxfattribs={'style': 'ГОСТ_Шрифт', 'height': 5.0 * global_scale, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}
@@ -454,14 +453,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     draw_legend_and_notes(new_msp, start_pt=(stamp_x0, stamp_y0 + 60.0 * global_scale), scale=global_scale)
 
 
-    # Упаковка геометрии, масштабирование под рамку А3
-    stamp_w = 185.0
-    stamp_h = 55.0
-    try:
-        if 'in_x_min' in locals() and 'in_y_min' in locals():
-            cluster_and_pack_geometry(new_msp, in_x_min, in_y_min, in_x_max, in_y_max, stamp_w, stamp_h)
-    except Exception as e:
-        _log(f"[ОШИБКА УПАКОВКИ] {e}", log_callback)
+
     try:
         new_doc.saveas(output_path)
         _log(f"[УСПЕХ] Исполнительная схема откосных стенок сохранена: {output_path}", log_callback)

@@ -34,8 +34,11 @@ def draw_gost_stamp(msp, x0: float, y0: float, scale: float = 1.0, stamp_data: O
     doc = msp.doc
     setup_gost_layers(doc)
 
-    x1 = x0 + STAMP_WIDTH
-    y1 = y0 + STAMP_HEIGHT
+    sw = STAMP_WIDTH * scale
+    sh = STAMP_HEIGHT * scale
+
+    x1 = x0 + sw
+    y1 = y0 + sh
 
     msp.add_lwpolyline(
         [(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
@@ -43,39 +46,39 @@ def draw_gost_stamp(msp, x0: float, y0: float, scale: float = 1.0, stamp_data: O
         dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
     )
 
-    msp.add_line((x0 + 65.0, y0), (x0 + 65.0, y1), dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50})
+    msp.add_line((x0 + 65.0 * scale, y0), (x0 + 65.0 * scale, y1), dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50})
 
     for ry in range(5, 55, 5):
-        msp.add_line((x0, y0 + ry), (x0 + 65.0, y0 + ry), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+        msp.add_line((x0, y0 + ry * scale), (x0 + 65.0 * scale, y0 + ry * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
     for cx in [10.0, 20.0, 30.0, 40.0, 55.0]:
-        msp.add_line((x0 + cx, y0 + 30.0), (x0 + cx, y1), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-        msp.add_line((x0 + cx, y0), (x0 + cx, y0 + 10.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+        msp.add_line((x0 + cx * scale, y0 + 30.0 * scale), (x0 + cx * scale, y1), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+        msp.add_line((x0 + cx * scale, y0), (x0 + cx * scale, y0 + 10.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
-    msp.add_line((x0 + 20.0, y0 + 10.0), (x0 + 20.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 40.0, y0 + 10.0), (x0 + 40.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 55.0, y0 + 10.0), (x0 + 55.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 20.0 * scale, y0 + 10.0 * scale), (x0 + 20.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 40.0 * scale, y0 + 10.0 * scale), (x0 + 40.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 55.0 * scale, y0 + 10.0 * scale), (x0 + 55.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
-    msp.add_line((x0 + 65.0, y0 + 45.0), (x1, y0 + 45.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 65.0, y0 + 30.0), (x1, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 65.0, y0 + 15.0), (x1, y0 + 15.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 65.0 * scale, y0 + 45.0 * scale), (x1, y0 + 45.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 65.0 * scale, y0 + 30.0 * scale), (x1, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 65.0 * scale, y0 + 15.0 * scale), (x1, y0 + 15.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
-    msp.add_line((x0 + 135.0, y0), (x0 + 135.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 135.0 * scale, y0), (x0 + 135.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
-    msp.add_line((x0 + 135.0, y0 + 25.0), (x1, y0 + 25.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 150.0, y0 + 15.0), (x0 + 150.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-    msp.add_line((x0 + 165.0, y0 + 15.0), (x0 + 165.0, y0 + 30.0), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 135.0 * scale, y0 + 25.0 * scale), (x1, y0 + 25.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 150.0 * scale, y0 + 15.0 * scale), (x0 + 150.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
+    msp.add_line((x0 + 165.0 * scale, y0 + 15.0 * scale), (x0 + 165.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
     def add_sm_txt(txt, cx_mm, cy_mm, align=TextEntityAlignment.MIDDLE_CENTER):
         msp.add_text(
             txt,
             dxfattribs={
                 'layer': 'ГОСТ_Штамп_Текст',
-                'height': 2.5,
+                'height': 2.5 * scale,
                 'style': 'ГОСТ_2.304',
                 'color': 7
             }
-        ).set_placement((x0 + cx_mm, y0 + cy_mm), align=align)
+        ).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
 
     add_sm_txt("Изм.", 5.0, 32.5)
     add_sm_txt("Кол.уч", 15.0, 32.5)
@@ -102,11 +105,11 @@ def draw_gost_stamp(msp, x0: float, y0: float, scale: float = 1.0, stamp_data: O
                 clean_txt,
                 dxfattribs={
                     'layer': 'ГОСТ_Штамп_Текст',
-                    'height': h_mm,
+                    'height': h_mm * scale,
                     'style': 'ГОСТ_2.304',
                     'color': 7
                 }
-            ).set_placement((x0 + cx_mm, y0 + cy_mm), align=align)
+            ).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
 
     add_val_txt(sdata.get('doc_code', 'РД ГК № Т-100-23-ПП1.1'), 125.0, 50.0, h_mm=2.5)
     add_val_txt(sdata.get('object_name', ''), 125.0, 37.5, h_mm=2.5)
@@ -129,19 +132,29 @@ def draw_gost_stamp(msp, x0: float, y0: float, scale: float = 1.0, stamp_data: O
             f"Масштаб {scale_str}",
             dxfattribs={
                 'layer': 'ГОСТ_Штамп_Текст',
-                'height': 2.5,
+                'height': 2.5 * scale,
                 'style': 'ГОСТ_2.304',
                 'color': 7
             }
-        ).set_placement((x0, y1 + 4.0), align=TextEntityAlignment.BOTTOM_LEFT)
+        ).set_placement((x0, y1 + 4.0 * scale), align=TextEntityAlignment.BOTTOM_LEFT)
 
 
 def draw_gost_frame_and_stamp(msp, bbox: BoundingBox, scale: float = 1.0, stamp_data: Optional[Dict[str, Any]] = None, scale_str: str = "1:100") -> Tuple[float, float, float, float]:
     setup_gost_layers(msp.doc)
 
-    x_min, y_min = 0.0, 0.0
-    w_frame, h_frame = 420.0, 297.0
-    x_max, y_max = x_min + w_frame, y_min + h_frame
+    w_frame, h_frame = 420.0 * scale, 297.0 * scale
+    
+    # Center the frame around the geometry bbox
+    if bbox.has_data:
+        cx = (bbox.extmin.x + bbox.extmax.x) / 2.0
+        cy = (bbox.extmin.y + bbox.extmax.y) / 2.0
+    else:
+        cx, cy = 0.0, 0.0
+        
+    x_min = cx - w_frame / 2.0
+    y_min = cy - h_frame / 2.0
+    x_max = x_min + w_frame
+    y_max = y_min + h_frame
 
     msp.add_lwpolyline(
         [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)],
@@ -149,10 +162,10 @@ def draw_gost_frame_and_stamp(msp, bbox: BoundingBox, scale: float = 1.0, stamp_
         dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
     )
 
-    in_x_min = x_min + 20.0
-    in_y_min = y_min + 5.0
-    in_x_max = x_max - 5.0
-    in_y_max = y_max - 5.0
+    in_x_min = x_min + 20.0 * scale
+    in_y_min = y_min + 5.0 * scale
+    in_x_max = x_max - 5.0 * scale
+    in_y_max = y_max - 5.0 * scale
 
     msp.add_lwpolyline(
         [(in_x_min, in_y_min), (in_x_max, in_y_min), (in_x_max, in_y_max), (in_x_min, in_y_max)],
@@ -160,9 +173,9 @@ def draw_gost_frame_and_stamp(msp, bbox: BoundingBox, scale: float = 1.0, stamp_
         dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
     )
 
-    stamp_x0 = in_x_max - STAMP_WIDTH
+    stamp_x0 = in_x_max - STAMP_WIDTH * scale
     stamp_y0 = in_y_min
 
-    draw_gost_stamp(msp, stamp_x0, stamp_y0, scale=1.0, stamp_data=stamp_data, scale_str=scale_str)
+    draw_gost_stamp(msp, stamp_x0, stamp_y0, scale=scale, stamp_data=stamp_data, scale_str=scale_str)
 
     return in_x_min, in_y_min, in_x_max, in_y_max
