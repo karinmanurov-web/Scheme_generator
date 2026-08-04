@@ -144,10 +144,11 @@ def draw_gost_frame_and_stamp(msp, bbox: BoundingBox, scale: float = 1.0, stamp_
 
     w_frame, h_frame = 420.0 * scale, 297.0 * scale
     
-    # Center the frame around the geometry bbox
+    # Center the frame around the geometry bbox, but shift it slightly down and right
+    # so the geometry sits in the upper-left area, freeing the bottom-right for the stamp and tables.
     if bbox.has_data:
-        cx = (bbox.extmin.x + bbox.extmax.x) / 2.0
-        cy = (bbox.extmin.y + bbox.extmax.y) / 2.0
+        cx = (bbox.extmin.x + bbox.extmax.x) / 2.0 + w_frame * 0.15
+        cy = (bbox.extmin.y + bbox.extmax.y) / 2.0 - h_frame * 0.15
     else:
         cx, cy = 0.0, 0.0
         

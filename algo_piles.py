@@ -470,23 +470,18 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         _log("[ОШИБКА] Сваи не найдены на чертеже.", log_callback)
         return
 
-    doc_out = ezdxf.new('R2010')
+    doc_out = doc_in
     if 'ГОСТ_2.304' not in doc_out.styles:
         doc_out.styles.new('ГОСТ_2.304', dxfattribs={'font': FONT_GOST, 'width': 1.0, 'oblique': 15.0})
 
     msp_out = doc_out.modelspace()
     for lname, color in {'Сваи_Проект': COLOR_MAIN, 'Оси_Проект': COLOR_MAIN, 'Исполнительная_Номера': COLOR_MAIN, 'Исполнительная_Размеры': COLOR_MAIN, 'Исполнительная_Отклонения': COLOR_FACT, 'Исполнительная_Ростверк': COLOR_BASE, 'Исполнительная_Оси_Опор': COLOR_FACT, 'Исполнительная_Оформление': COLOR_MAIN, 'ИСП_Текст': COLOR_MAIN, 'ИСП_Таблица': COLOR_MAIN}.items():
-        doc_out.layers.new(lname, dxfattribs={'color': color})
-
-    # Копирование остальной геометрии (ростверки, контуры), кроме размеров и текста
-    for ent in msp_in:
-        etype = ent.dxftype()
-        layer = ent.dxf.layer if hasattr(ent.dxf, 'layer') else ''
-        if etype not in ('DIMENSION', 'TEXT', 'MTEXT') and layer.lower() not in ('defpoints', 'рамка', 'штамп', 'оформление'):
-            try:
-                msp_out.add_entity(ent.copy())
-            except Exception:
-                pass
+        if lname not in doc_out.layers:
+            doc_out.layers.new(lname, dxfattribs={'color': color})
+            
+    for ent in list(msp_out):
+        if ent.dxftype() in ('DIMENSION', 'TEXT', 'MTEXT', 'LEADER', 'MULTILEADER'):
+            msp_out.delete_entity(ent)
     
 
     hw = SIZES['pile_size'] / 2.0
@@ -552,7 +547,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     # Динамический выбор глобального масштаба под лист А3 (420 x 297 мм)
     geom_w = max(bbox.extmax.x - bbox.extmin.x, 100.0)
     geom_h = max(bbox.extmax.y - bbox.extmin.y, 100.0)
-    req_scale = max(geom_w / 370.0, geom_h / 270.0, 1.0)
+    req_scale = max(geom_w / 250.0, geom_h / 180.0, 1.0)
     global_scale = next((float(s) for s in STANDARD_SCALES if s >= req_scale), float(STANDARD_SCALES[-1]))
     scale_str = f"1:{int(global_scale)}" if global_scale >= 1.0 else f"{round(global_scale, 2)}"
 

@@ -343,17 +343,9 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     source_dims = extract_source_dimensions(src_msp)
     source_levels = extract_source_levels(src_msp)
 
-    out_doc = ezdxf.new('R2010')
+    out_doc = src_doc
+    out_msp = src_msp
     setup_gost_environment(out_doc)
-
-# Copying entities instead of using importer to avoid ACDB_BLOCKREPRESENTATION_DATA warnings
-    out_msp = out_doc.modelspace()
-    for ent in src_msp:
-        try:
-            if ent.dxftype() not in ('ACDB_BLOCKREPRESENTATION_DATA', 'DICTIONARY'):
-                out_msp.add_entity(ent.copy())
-        except Exception:
-            pass
 
     # Очистка посторонних элементов и перекраска всей конструкции в строго монохромный ГОСТ слой (COLOR_MAIN = 7)
     entities_to_delete = []
@@ -400,7 +392,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     w, h = 420.0, 297.0
     geom_w = max(bbox.extmax.x - bbox.extmin.x, 100.0)
     geom_h = max(bbox.extmax.y - bbox.extmin.y, 100.0)
-    req_scale = max(geom_w / 370.0, geom_h / 270.0, 1.0)
+    req_scale = max(geom_w / 250.0, geom_h / 180.0, 1.0)
     scale = next((float(s) for s in STANDARD_SCALES if s >= req_scale), float(STANDARD_SCALES[-1]))
     scale_str = f"1:{int(scale)}" if scale >= 1.0 else f"{round(scale, 2)}"
 

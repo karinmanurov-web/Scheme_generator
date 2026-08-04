@@ -56,8 +56,8 @@ def _log(msg: str, log_callback=None) -> None:
         print(msg)
 
 
-def setup_document() -> ezdxf.document.Drawing:
-    doc = ezdxf.new('R2010')
+def setup_document(doc: ezdxf.document.Drawing) -> ezdxf.document.Drawing:
+
     doc.header['$MEASUREMENT'] = 1
     doc.header['$INSUNITS'] = 4
 
@@ -406,27 +406,25 @@ def draw_legend_and_notes(msp, start_pt: Tuple[float, float], scale: float = 1.0
 def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: Optional[str] = None, log_callback=None, stamp_data: Optional[Dict[str, Any]] = None, table_data: Optional[List[Dict[str, Any]]] = None) -> None:
     _log(f"[ИНФО] Обработка откосных стенок: {input_path}", log_callback)
 
-    new_doc = setup_document()
-    new_msp = new_doc.modelspace()
-
     elements, dims, levels = [], [], []
-    if os.path.exists(input_path):
-        try:
-            src_doc = ezdxf.readfile(input_path)
-            elements, dims, levels = extract_valid_geometry(src_doc.modelspace(), src_doc)
-            _log(f"[ИНФО] Найдено контуров: {len(elements)}, размеров: {len(dims)}, отметок: {len(levels)}", log_callback)
-        except Exception as e:
-            _log(f"[ОШИБКА] Ошибка чтения: {e}", log_callback)
+    try:
+        src_doc = ezdxf.readfile(input_path)
+        src_msp = src_doc.modelspace()
+        elements, dims, levels = extract_valid_geometry(src_msp, src_doc)
+        _log(f"[ИНФО] Найдено контуров: {len(elements)}, размеров: {len(dims)}, отметок: {len(levels)}", log_callback)
+    except Exception as e:
+        _log(f"[ОШИБКА] Ошибка чтения: {e}", log_callback)
+        return
+
+    new_doc = setup_document(src_doc)
+    new_msp = new_doc.modelspace()
+    
+    # Delete old dimensions and text so we don't have overlapping old/new
+    for ent in list(new_msp):
+        if ent.dxftype() in ('DIMENSION', 'TEXT', 'MTEXT', 'LEADER', 'MULTILEADER'):
+            new_msp.delete_entity(ent)
 
     L, B, area = analyze_wall_geometry(elements)
-
-    for el in elements:
-        if el[0] == 'LINE':
-            new_msp.add_line(el[1], el[2], dxfattribs={'layer': el[3]})
-        elif el[0] == 'POLYLINE':
-            new_msp.add_lwpolyline(el[1], close=el[2], dxfattribs={'layer': el[3]})
-        elif el[0] == 'CIRCLE':
-            new_msp.add_circle(el[1], radius=el[2], dxfattribs={'layer': el[3]})
 
     try:
         bbox = safe_extents(new_msp)
@@ -435,7 +433,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
 
     geom_w = max(bbox.extmax.x - bbox.extmin.x, 100.0)
     geom_h = max(bbox.extmax.y - bbox.extmin.y, 100.0)
-    req_scale = max(geom_w / 370.0, geom_h / 270.0, 1.0)
+    req_scale = max(geom_w / 250.0, geom_h / 180.0, 1.0)
     global_scale = next((float(s) for s in STANDARD_SCALES if s >= req_scale), float(STANDARD_SCALES[-1]))
     scale_str = f"1:{int(global_scale)}" if global_scale >= 1.0 else f"{round(global_scale, 2)}"
 

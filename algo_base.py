@@ -496,11 +496,13 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     scale_annotations = find_scale_annotations(src_msp)
     source_dims = extract_source_dimensions(src_msp)
 
-    out_doc = ezdxf.new('R2010')
+    out_doc = src_doc
     setup_gost_environment(out_doc)
 
-    import_and_recolor_dxf(src_doc, out_doc)
     msp = out_doc.modelspace()
+    for ent in list(msp):
+        if ent.dxftype() in ('DIMENSION', 'TEXT', 'MTEXT', 'LEADER', 'MULTILEADER'):
+            msp.delete_entity(ent)
 
     primitives = extract_primitives_wcs(msp)
     bbox = calculate_bounds(primitives)
@@ -510,7 +512,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     # Расчет масштаба под лист А3 (420 x 297 мм)
     geom_w = max(bbox.extmax.x - bbox.extmin.x, 100.0)
     geom_h = max(bbox.extmax.y - bbox.extmin.y, 100.0)
-    req_scale = max(geom_w / 370.0, geom_h / 270.0, 1.0)
+    req_scale = max(geom_w / 250.0, geom_h / 180.0, 1.0)
     global_scale = next((float(s) for s in STANDARD_SCALES if s >= req_scale), float(STANDARD_SCALES[-1]))
     scale_str = f"1:{int(global_scale)}" if global_scale >= 1.0 else f"{round(global_scale, 2)}"
 
