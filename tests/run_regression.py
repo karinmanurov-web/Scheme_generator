@@ -46,10 +46,19 @@ def resolve_path(value: str | None) -> Path | None:
     return ROOT / Path(decoded)
 
 
-def fallback_fixture_file(manifest_path: Path, suffix: str) -> Path | None:
-    """Use the only matching fixture file if a manifest filename changed."""
-    matches = sorted(manifest_path.parent.glob(f"*{suffix}"))
-    return matches[0] if len(matches) == 1 else None
+def fallback_fixture_file(manifest_path: Path, suffix: str, search_dir: Path | None = None) -> Path | None:
+    """Find a unique fixture file when a manifest path is stale or names changed.
+
+    Fixtures live in the project folders themselves, while manifests live under
+    tests/fixtures. Prefer the project folder derived from the source path, then
+    fall back to the manifest folder for future self-contained cases.
+    """
+    candidates: list[Path] = []
+    if search_dir and search_dir.exists():
+        candidates.extend(sorted(search_dir.glob(f"*{suffix}")))
+    candidates.extend(sorted(manifest_path.parent.glob(f"*{suffix}")))
+    unique = list(dict.fromkeys(candidates))
+    return unique[0] if len(unique) == 1 else None
 
 
 def load_manifests(case_filter: str | None) -> list[tuple[Path, dict[str, Any]]]:
@@ -112,9 +121,13 @@ def evaluate_case(manifest_path: Path, manifest: dict[str, Any], render: bool) -
     if not source or not source.exists():
         source = fallback_fixture_file(manifest_path, ".dxf")
 
+    # Resolve the reference relative to the repository root first. If the PDF was
+    # renamed, locate the unique PDF beside the source DXF instead of silently
+    # losing the visual reference.
     reference_path = resolve_path(str((manifest.get("reference") or {}).get("file", "")))
+    source_dir = source.parent if source and source.exists() else None
     if not reference_path or not reference_path.exists():
-        reference_path = fallback_fixture_file(manifest_path, ".pdf")
+        reference_path = fallback_fixture_file(manifest_path, ".pdf", search_dir=source_dir)
 
     output = case_report / "result.dxf"
 
