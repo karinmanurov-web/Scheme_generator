@@ -1,6 +1,6 @@
 """Semantic and structural regression checks for generated DXF files.
 
-The evaluator deliberately checks the *output contract* rather than the names of
+The evaluator deliberately checks the output contract rather than the names of
 layers/blocks in the source drawing. Source-side conventions are therefore free
 to vary between projects.
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import ezdxf
+from ezdxf import bbox as ezdxf_bbox
 
 
 @dataclass
@@ -28,6 +29,7 @@ class CheckResult:
 class Evaluation:
     case_id: str
     checks: list[CheckResult] = field(default_factory=list)
+    diagnostics: dict[str, Any] = field(default_factory=dict)
 
     @property
     def failed_critical(self) -> bool:
@@ -64,6 +66,59 @@ def _text_values(msp) -> list[str]:
     return values
 
 
+def _bbox_for_entities(entities):
+    try:
+        box = ezdxf_bbox.extents(entities)
+        return box if box.has_data else None
+    except Exception:
+        return None
+
+
+def _bbox_dict(box) -> dict[str, float] | None:
+    if box is None or not box.has_data:
+        return None
+    return {
+        "min_x": round(float(box.extmin.x), 3),
+        "min_y": round(float(box.extmin.y), 3),
+        "max_x": round(float(box.extmax.x), 3),
+        "max_y": round(float(box.extmax.y), 3),
+        "width": round(float(box.extmax.x - box.extmin.x), 3),
+        "height": round(float(box.extmax.y - box.extmin.y), 3),
+    }
+
+
+def _geometry_diagnostics(doc, msp) -> dict[str, Any]:
+    all_box = _bbox_for_entities(list(msp))
+    frame_layers = {"ГОСТ_Рамка", "Исполнительная_Оформление"}
+    frame_entities = [e for e in msp if str(getattr(e.dxf, "layer", "")) in frame_layers]
+    frame_box = _bbox_for_entities(frame_entities)
+
+    diagnostics: dict[str, Any] = {
+        "modelspace_bbox": _bbox_dict(all_box),
+        "frame_bbox": _bbox_dict(frame_box),
+        "frame_entity_count": len(frame_entities),
+    }
+
+    if frame_box and frame_box.has_data:
+        fw = abs(float(frame_box.extmax.x - frame_box.extmin.x))
+        fh = abs(float(frame_box.extmax.y - frame_box.extmin.y))
+        diagnostics["frame_aspect_ratio"] = round(fw / fh, 4) if fh else None
+        # A landscape A3 sheet is 420/297 ~= 1.414. We don't fail on this
+        # because projects may use other sheet sizes; it is a diagnostic only.
+        diagnostics["frame_aspect_deviation_from_a3"] = round(abs((fw / fh if fh else 0.0) - 420 / 297), 4) if fh else None
+
+    if all_box and frame_box and all_box.has_data and frame_box.has_data:
+        model_w = abs(float(all_box.extmax.x - all_box.extmin.x))
+        model_h = abs(float(all_box.extmax.y - all_box.extmin.y))
+        frame_w = abs(float(frame_box.extmax.x - frame_box.extmin.x))
+        frame_h = abs(float(frame_box.extmax.y - frame_box.extmin.y))
+        diagnostics["model_to_frame_width_ratio"] = round(model_w / frame_w, 4) if frame_w else None
+        diagnostics["model_to_frame_height_ratio"] = round(model_h / frame_h, 4) if frame_h else None
+        diagnostics["model_to_frame_area_ratio"] = round((model_w * model_h) / (frame_w * frame_h), 4) if frame_w and frame_h else None
+
+    return diagnostics
+
+
 def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
     case_id = str(manifest["id"])
     evaluation = Evaluation(case_id)
@@ -83,6 +138,7 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
     texts = _text_values(msp)
     layers = {str(entity.dxf.layer) for entity in msp if hasattr(entity.dxf, "layer")}
     total = sum(counts.values())
+    evaluation.diagnostics = _geometry_diagnostics(doc, msp)
 
     evaluation.add("EXEC-READ", "Выходной DXF читается ezdxf", "critical", "PASS", f"entities={total}")
 
@@ -117,8 +173,6 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
             "present" if present else "missing",
         )
 
-    # Each group is an OR: different implemented algorithms use different
-    # output-layer naming conventions, while the semantic role is identical.
     for index, group in enumerate(checks.get("required_output_layer_any", []) or [], start=1):
         options = [str(value) for value in group]
         matching = [name for name in options if name in layers]
@@ -174,9 +228,6 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
             "present" if present else "missing",
         )
 
-    # Semantic roles can point either to one exact output layer or to a list of
-    # acceptable layer names. This keeps the contract independent of the source
-    # drawing while allowing the four current algorithms to evolve separately.
     for key, title, default_options in [
         ("project_dimensions", "Контракт: проектные размеры", ["ГОСТ_Размеры_Проект", "ИС_Размеры_Проект_Факт"]),
         ("actual_dimensions", "Контракт: фактические размеры", ["ГОСТ_Размеры_Факт", "ИС_Размеры_Проект_Факт"]),
@@ -209,6 +260,7 @@ def evaluation_to_dict(evaluation: Evaluation) -> dict[str, Any]:
         "case_id": evaluation.case_id,
         "passed": evaluation.passed,
         "failed_critical": evaluation.failed_critical,
+        "diagnostics": evaluation.diagnostics,
         "checks": [
             {
                 "id": c.check_id,
