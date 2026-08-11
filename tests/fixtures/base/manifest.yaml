@@ -12,7 +12,7 @@ reference:
     - {id: sheet_05, page: 5, title: "Заполнение цоколей бетоном В30, лист 2"}
     - {id: sheet_06, page: 6, title: "Переходная плита Пл-1, лист 2"}
 algorithm:
-  module: algo_base
+  module: algo_base_fixed
   function: run
 checks:
   min_entity_count: 100
