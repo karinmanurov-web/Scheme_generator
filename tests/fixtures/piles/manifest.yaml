@@ -9,7 +9,7 @@ reference:
     - {id: sheet_02, page: 2, title: "Срубка голов свай, устройство опалубки"}
     - {id: sheet_03, page: 3, title: "Срубка голов свай, устройство опалубки"}
 algorithm:
-  module: algo_piles
+  module: algo_piles_fixed
   function: run
 checks:
   min_entity_count: 100
