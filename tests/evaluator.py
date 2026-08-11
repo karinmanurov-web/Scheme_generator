@@ -84,13 +84,7 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
     layers = {str(entity.dxf.layer) for entity in msp if hasattr(entity.dxf, "layer")}
     total = sum(counts.values())
 
-    evaluation.add(
-        "EXEC-READ",
-        "Выходной DXF читается ezdxf",
-        "critical",
-        "PASS",
-        f"entities={total}",
-    )
+    evaluation.add("EXEC-READ", "Выходной DXF читается ezdxf", "critical", "PASS", f"entities={total}")
 
     checks = manifest.get("checks", {}) or {}
     min_entities = int(checks.get("min_entity_count", 1))
@@ -121,6 +115,19 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
             "critical",
             "PASS" if present else "FAIL",
             "present" if present else "missing",
+        )
+
+    # Each group is an OR: different implemented algorithms use different
+    # output-layer naming conventions, while the semantic role is identical.
+    for index, group in enumerate(checks.get("required_output_layer_any", []) or [], start=1):
+        options = [str(value) for value in group]
+        matching = [name for name in options if name in layers]
+        evaluation.add(
+            f"DXF-LAYER-ANY-{index}",
+            "Присутствует хотя бы один слой из группы: " + " / ".join(options),
+            "critical",
+            "PASS" if matching else "FAIL",
+            ", ".join(matching) if matching else "none",
         )
 
     for prefix in checks.get("required_output_layer_prefixes", []) or []:
@@ -156,8 +163,6 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
             "found" if found else "missing",
         )
 
-    # Generic output contract shared by the current algorithms. These are
-    # names created by our own generators, not assumptions about source DXF.
     expected_contract = checks.get("output_contract", {}) or {}
     for layer_name in expected_contract.get("required_layers", []) or []:
         present = str(layer_name) in layers
@@ -169,22 +174,28 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
             "present" if present else "missing",
         )
 
-    for key, title in {
-        "project_dimensions": "Контракт: проектные размеры",
-        "actual_dimensions": "Контракт: фактические размеры",
-        "frame": "Контракт: рамка/штамп",
-    }.items():
-        if not expected_contract.get(key):
+    # Semantic roles can point either to one exact output layer or to a list of
+    # acceptable layer names. This keeps the contract independent of the source
+    # drawing while allowing the four current algorithms to evolve separately.
+    for key, title, default_options in [
+        ("project_dimensions", "Контракт: проектные размеры", ["ГОСТ_Размеры_Проект", "ИС_Размеры_Проект_Факт"]),
+        ("actual_dimensions", "Контракт: фактические размеры", ["ГОСТ_Размеры_Факт", "ИС_Размеры_Проект_Факт"]),
+        ("frame", "Контракт: рамка/штамп", ["ГОСТ_Рамка", "ИС_Оформление_Штамп"]),
+    ]:
+        configured = expected_contract.get(key)
+        if not configured:
             continue
-        layer = expected_contract.get(key) if isinstance(expected_contract.get(key), str) else None
-        if layer:
-            present = layer in layers
-            details = layer
-        else:
-            prefix = "ГОСТ_Размеры_Проект" if key == "project_dimensions" else "ГОСТ_Размеры_Факт" if key == "actual_dimensions" else "ГОСТ_"
-            present = any(name.startswith(prefix) for name in layers)
-            details = prefix
-        evaluation.add(f"CONTRACT-{key}", title, "critical", "PASS" if present else "FAIL", details)
+        options = [configured] if isinstance(configured, str) else list(configured)
+        if not options:
+            options = default_options
+        matching = [str(name) for name in options if str(name) in layers]
+        evaluation.add(
+            f"CONTRACT-{key}",
+            title,
+            "critical",
+            "PASS" if matching else "FAIL",
+            ", ".join(matching) if matching else "none",
+        )
 
     return evaluation
 
