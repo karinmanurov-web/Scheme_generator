@@ -1,0 +1,26 @@
+id: base
+name: "Подбетонка"
+source: "#U041f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430/#U043f#U043e#U0434#U0431#U0435#U0442.dxf"
+reference:
+  file: "#U041f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430/34 #U043f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430 #U043f#U0435#U0440#U0435#U0445 #U043f#U043b#U0438#U0442#U044b.pdf"
+  pages: 6
+  sheets:
+    - {id: sheet_01, page: 1, title: "Бетонная подготовка под монолитную переходную плиту"}
+    - {id: sheet_02, page: 2, title: "Бетонная подготовка / исполнительные данные"}
+    - {id: sheet_03, page: 3, title: "Заполнение цоколей бетоном В30, переходная плита"}
+    - {id: sheet_04, page: 4, title: "Переходная плита Пл-1, лист 1"}
+    - {id: sheet_05, page: 5, title: "Заполнение цоколей бетоном В30, лист 2"}
+    - {id: sheet_06, page: 6, title: "Переходная плита Пл-1, лист 2"}
+algorithm:
+  module: algo_base
+  function: run
+checks:
+  min_entity_count: 1
+  required_entity_types: [LINE, TEXT]
+manual_checks:
+  - {id: B-S01, title: "Бетонная подготовка и исполнительные размеры соответствуют листу 1", severity: critical}
+  - {id: B-S02, title: "Исполнительные отметки и размеры соответствуют листу 2", severity: critical}
+  - {id: B-S03, title: "Цоколи и переходная плита соответствуют листу 3", severity: critical}
+  - {id: B-S04, title: "Переходная плита Пл-1 соответствует листу 4", severity: critical}
+  - {id: B-S05, title: "Цоколи и переходная плита соответствуют листу 5", severity: critical}
+  - {id: B-S06, title: "Переходная плита Пл-1 соответствует листу 6", severity: critical}
