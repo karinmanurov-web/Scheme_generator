@@ -1,0 +1,21 @@
+id: piles
+name: "Свайный фундамент"
+source: "#U0421#U0432#U0430#U0439#U043d#U044b#U0439 #U0444#U0443#U043d#U0434#U0430#U043c#U0435#U043d#U0442/#U0441#U0432#U0430#U0438.dxf"
+reference:
+  file: "#U0421#U0432#U0430#U0439#U043d#U044b#U0439 #U0444#U0443#U043d#U0434#U0430#U043c#U0435#U043d#U0442/5 #U0430#U043a#U0442.pdf"
+  pages: 3
+  sheets:
+    - {id: sheet_01, page: 1, title: "Срубка голов свай, устройство опалубки бетонной подготовки"}
+    - {id: sheet_02, page: 2, title: "Срубка голов свай, устройство опалубки"}
+    - {id: sheet_03, page: 3, title: "Срубка голов свай, устройство опалубки"}
+algorithm:
+  module: algo_piles
+  function: run
+checks:
+  min_entity_count: 1
+  required_entity_types: [LINE, TEXT]
+manual_checks:
+  - {id: P-S01, title: "Схема свай и отклонений соответствует листу 1", severity: critical}
+  - {id: P-S02, title: "Схема свай и отклонений соответствует листу 2", severity: critical}
+  - {id: P-S03, title: "Схема свай, ростверка и исполнительных данных соответствует листу 3", severity: critical}
+  - {id: P-G01, title: "Координатная/исполнительная ведомость соответствует эталону", severity: critical}
