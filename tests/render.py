@@ -1,36 +1,85 @@
 """Headless render helpers for regression reports.
 
-DXF is rendered with ezdxf's Matplotlib backend. PDF pages are rendered with
-PyMuPDF. AutoCAD is never required by the regression loop.
+The preview is intentionally rendered for *inspection*, not as a DXF plotter:
+- white background;
+- ACI 7 (AutoCAD black/white) is shown as black;
+- explicit red/other colors stay colored;
+- the original DXF is never modified or saved by the renderer.
+
+AutoCAD is never required by the regression loop.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
+
+
+def _prepare_preview_colors(doc) -> None:
+    """Make AutoCAD ACI-7 geometry visible on a white preview background.
+
+    In AutoCAD ACI 7 is the context-dependent black/white color. On a dark
+    AutoCAD canvas it appears white, while ezdxf's Matplotlib renderer resolves
+    it to white as well. That made the old regression PNG hide the most
+    important geometry when the background was changed to white.
+
+    For rendering only, layers using ACI 7 get an explicit black true-color.
+    Red ACI 1 and all other colors are left untouched. The loaded document is
+    never written back to disk.
+    """
+    for layer in doc.layers:
+        try:
+            if int(layer.dxf.color) == 7 and not layer.dxf.hasattr("true_color"):
+                layer.dxf.true_color = 0x000000
+        except Exception:
+            continue
 
 
 def render_dxf_to_png(dxf_path: Path, png_path: Path) -> None:
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import ezdxf
     from ezdxf.addons.drawing import Frontend, RenderContext
+    from ezdxf.addons.drawing.config import BackgroundPolicy, ColorPolicy, Configuration
     from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
+    from ezdxf.addons.drawing.properties import LayoutProperties
 
     doc = ezdxf.readfile(dxf_path)
     msp = doc.modelspace()
+    _prepare_preview_colors(doc)
     png_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fig = plt.figure(figsize=(16, 10), dpi=140)
-    ax = fig.add_axes([0.02, 0.02, 0.96, 0.96])
+    # Do not use bbox_inches="tight": for engineering drawings it can produce
+    # misleading crops when modelspace contains distant construction entities.
+    # A fixed canvas gives us a stable preview and makes such extent problems
+    # visible instead of hiding them.
+    fig = plt.figure(figsize=(16, 10), dpi=140, facecolor="white")
+    ax = fig.add_axes([0.02, 0.02, 0.96, 0.96], facecolor="white")
     ax.set_aspect("equal", adjustable="datalim")
     ax.set_axis_off()
 
     ctx = RenderContext(doc)
     backend = MatplotlibBackend(ax)
-    Frontend(ctx, backend).draw_layout(msp, finalize=True)
-    fig.savefig(png_path, dpi=140, bbox_inches="tight", pad_inches=0.05)
+    config = Configuration(
+        color_policy=ColorPolicy.COLOR,
+        background_policy=BackgroundPolicy.WHITE,
+        lineweight_scaling=0.8,
+    )
+    layout_properties = LayoutProperties(
+        msp.name,
+        background_color="#ffffff",
+        foreground_color="#000000",
+        dark_background=False,
+    )
+
+    Frontend(ctx, backend, config).draw_layout(
+        msp,
+        finalize=True,
+        layout_properties=layout_properties,
+    )
+
+    fig.savefig(png_path, dpi=140, facecolor="white")
     plt.close(fig)
 
 
