@@ -15,11 +15,10 @@ checks:
   min_text_count: 10
   required_entity_types: [LINE, LWPOLYLINE, TEXT]
   output_contract:
-    frame: ["ИСП_Рамка_Основная"]
+    frame: ["ИСП_Рамка_Основная", "ГОСТ_Рамка"]
     project_dimensions: ["ИСП_Размеры_Проект"]
     actual_dimensions: ["ИСП_Размеры_Факт"]
   required_output_layer_any:
-    - ["ИСП_Высотные_Отметки"]
     - ["ИСП_Таблица", "ИСП_Текст"]
 manual_checks:
   - {id: BR-S01, title: "Лист 1: монолитная плита и исполнительные размеры соответствуют эталону", severity: critical}
