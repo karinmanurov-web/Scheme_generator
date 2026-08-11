@@ -1,0 +1,19 @@
+id: bridge
+name: "Пролетное строение"
+source: "#U041f#U0440#U043e#U043b#U0435#U0442#U043d#U043e#U0435 #U0441#U0442#U0440#U043e#U0435#U043d#U0438#U0435/#U043f#U0441.dxf"
+reference:
+  file: "#U041f#U0440#U043e#U043b#U0435#U0442#U043d#U043e#U0435 #U0441#U0442#U0440#U043e#U0435#U043d#U0438#U0435/26, 26.1 #U0430#U043a#U0442.pdf"
+  pages: 2
+  sheets:
+    - {id: sheet_01, page: 1, title: "Устройство монолитной плиты пролетного строения"}
+    - {id: sheet_02, page: 2, title: "Пролетное строение"}
+algorithm:
+  module: algo_bridge
+  function: run
+checks:
+  min_entity_count: 1
+  required_entity_types: [LINE, TEXT]
+manual_checks:
+  - {id: BR-S01, title: "Монолитная плита и исполнительные размеры соответствуют листу 1", severity: critical}
+  - {id: BR-S02, title: "Общий вид пролетного строения соответствует листу 2", severity: critical}
+  - {id: BR-G01, title: "Таблицы, отметки, примечания и оформление визуально соответствуют эталону", severity: warning}
