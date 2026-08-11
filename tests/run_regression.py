@@ -47,12 +47,7 @@ def resolve_path(value: str | None) -> Path | None:
 
 
 def fallback_fixture_file(manifest_path: Path, suffix: str, search_dir: Path | None = None) -> Path | None:
-    """Find a unique fixture file when a manifest path is stale or names changed.
-
-    Fixtures live in the project folders themselves, while manifests live under
-    tests/fixtures. Prefer the project folder derived from the source path, then
-    fall back to the manifest folder for future self-contained cases.
-    """
+    """Find a unique fixture file when a manifest path is stale or names changed."""
     candidates: list[Path] = []
     if search_dir and search_dir.exists():
         candidates.extend(sorted(search_dir.glob(f"*{suffix}")))
@@ -121,9 +116,6 @@ def evaluate_case(manifest_path: Path, manifest: dict[str, Any], render: bool) -
     if not source or not source.exists():
         source = fallback_fixture_file(manifest_path, ".dxf")
 
-    # Resolve the reference relative to the repository root first. If the PDF was
-    # renamed, locate the unique PDF beside the source DXF instead of silently
-    # losing the visual reference.
     reference_path = resolve_path(str((manifest.get("reference") or {}).get("file", "")))
     source_dir = source.parent if source and source.exists() else None
     if not reference_path or not reference_path.exists():
@@ -165,10 +157,13 @@ def evaluate_case(manifest_path: Path, manifest: dict[str, Any], render: bool) -
     result["evaluation"] = evaluation_to_dict(evaluation)
 
     if render and output.exists():
-        result_png = case_report / "result.png"
+        result_png = case_report / "result_full.png"
+        focus_png = case_report / "result_focus.png"
         try:
-            render_dxf_to_png(output, result_png)
-            result["render"]["result_png"] = str(result_png.relative_to(ROOT))
+            render_dxf_to_png(output, result_png, focus=False)
+            result["render"]["result_full_png"] = str(result_png.relative_to(ROOT))
+            render_dxf_to_png(output, focus_png, focus=True)
+            result["render"]["result_focus_png"] = str(focus_png.relative_to(ROOT))
         except Exception as exc:
             result["render"]["result_error"] = repr(exc)
 
@@ -206,11 +201,20 @@ def html_report(results: list[dict[str, Any]]) -> Path:
             f"<li><b>{escape(str(c.get('severity', 'warning')))}</b>: {escape(str(c.get('title', '')))}</li>"
             for c in item.get("manual_checks", [])
         )
-        result_img = item.get("render", {}).get("result_png")
-        ref_imgs = item.get("render", {}).get("reference_pngs", [])
+        diagnostics = evaluation.get("diagnostics", {})
+        diagnostic_html = "".join(
+            f"<tr><td>{escape(str(k))}</td><td>{escape(str(v))}</td></tr>"
+            for k, v in diagnostics.items()
+        )
+        render_data = item.get("render", {})
+        full_img = render_data.get("result_full_png")
+        focus_img = render_data.get("result_focus_png")
+        ref_imgs = render_data.get("reference_pngs", [])
         visuals = ""
-        if result_img:
-            visuals += f'<div class="image"><h4>Generated</h4><img src="{escape(result_img)}"></div>'
+        if full_img:
+            visuals += f'<div class="image"><h4>Generated — full modelspace</h4><img src="{escape(full_img)}"></div>'
+        if focus_img:
+            visuals += f'<div class="image"><h4>Generated — focused sheet</h4><img src="{escape(focus_img)}"></div>'
         for ref in ref_imgs:
             visuals += f'<div class="image"><h4>{escape(Path(ref).name)}</h4><img src="{escape(ref)}"></div>'
 
@@ -218,7 +222,8 @@ def html_report(results: list[dict[str, Any]]) -> Path:
             f"<section><h2>{escape(str(item['name']))} <span class='{css}'>{status}</span></h2>"
             f"<p>Execution: {escape(str(item.get('execution', {}).get('seconds', '—')))} s</p>"
             f"<p>Source: <code>{escape(str(item.get('source', '')))}</code><br>Reference: <code>{escape(str(item.get('reference_file', '')))}</code></p>"
-            f"<table><tr><th>ID</th><th>Check</th><th>Severity</th><th>Status</th><th>Details</th></tr>{check_html}</table>"
+            f"<h3>Geometry diagnostics</h3><table><tr><th>Metric</th><th>Value</th></tr>{diagnostic_html}</table>"
+            f"<h3>Automated checks</h3><table><tr><th>ID</th><th>Check</th><th>Severity</th><th>Status</th><th>Details</th></tr>{check_html}</table>"
             f"<h3>Manual checks still to automate</h3><ul>{manual_html}</ul>"
             f"<div class='gallery'>{visuals}</div></section>"
         )
@@ -226,7 +231,7 @@ def html_report(results: list[dict[str, Any]]) -> Path:
     html = """<!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><title>Scheme Generator regression report</title>
 <style>
-body{font-family:Arial,sans-serif;max-width:1600px;margin:30px auto;padding:0 20px;background:#f5f5f5;color:#222}
+body{font-family:Arial,sans-serif;max-width:1800px;margin:30px auto;padding:0 20px;background:#f5f5f5;color:#222}
 section{background:white;padding:20px;margin:20px 0;border-radius:10px;box-shadow:0 1px 5px #ccc}
 h2{margin-top:0}.pass,.fail{padding:4px 8px;border-radius:5px;font-size:12px}.pass{background:#d7f5dc;color:#176b2c}.fail{background:#ffd9d9;color:#9a1d1d}
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid #ddd;padding:6px;text-align:left;vertical-align:top}th{background:#eee}
@@ -234,7 +239,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{border:1px solid 
 code{font-size:12px}
 </style></head><body>
 <h1>Scheme Generator — regression report</h1>
-<p>Generated headlessly. AutoCAD is not used.</p>
+<p>Generated headlessly. AutoCAD is not used. Full and focused previews are shown separately so distant source geometry can be diagnosed without hiding the sheet.</p>
 """ + "\n".join(rows) + "\n</body></html>"
     target = REPORTS / "report.html"
     target.write_text(html, encoding="utf-8")
@@ -264,6 +269,9 @@ def main() -> int:
         ok = bool(item.get("execution", {}).get("passed")) and bool(evaluation.get("passed"))
         status = "PASS" if ok else "FAIL"
         print(f"{status:4} {item['case_id']:<12} {item.get('execution', {}).get('seconds', '—')} s")
+        diagnostics = evaluation.get("diagnostics", {})
+        if diagnostics:
+            print(f"     bbox={diagnostics.get('modelspace_bbox')} frame={diagnostics.get('frame_bbox')} ratio={diagnostics.get('model_to_frame_area_ratio')}")
         failed = failed or not ok
     return 1 if failed else 0
 
