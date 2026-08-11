@@ -20,7 +20,6 @@ checks:
     project_dimensions: ["ИСП_Размеры_Проект"]
     actual_dimensions: ["ИСП_Размеры_Факт"]
   required_output_layer_any:
-    - ["ИСП_Высотные_Отметки"]
     - ["ИСП_Текст"]
 manual_checks:
   - {id: P-S01, title: "Лист 1: схема свай и их отклонений соответствует эталону", severity: critical}
