@@ -1,8 +1,8 @@
 id: piles
 name: "Свайный фундамент"
-source: "#U0421#U0432#U0430#U0439#U043d#U044b#U0439 #U0444#U0443#U043d#U0434#U0430#U043c#U0435#U043d#U0442/#U0441#U0432#U0430#U0438.dxf"
+source: "Свайный фундамент/сваи.dxf"
 reference:
-  file: "#U0421#U0432#U0430#U0439#U043d#U044b#U0439 #U0444#U0443#U043d#U0434#U0430#U043c#U0435#U043d#U0442/5 #U0430#U043a#U0442.pdf"
+  file: "Свайный фундамент/5 акт.pdf"
   pages: 3
   sheets:
     - {id: sheet_01, page: 1, title: "Срубка голов свай, устройство опалубки бетонной подготовки"}
@@ -12,10 +12,18 @@ algorithm:
   module: algo_piles
   function: run
 checks:
-  min_entity_count: 1
-  required_entity_types: [LINE, TEXT]
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ГОСТ_Рамка"]
+    project_dimensions: ["ИСП_Размеры_Проект"]
+    actual_dimensions: ["ИСП_Размеры_Факт"]
+  required_output_layer_any:
+    - ["ИСП_Высотные_Отметки"]
+    - ["ИСП_Текст"]
 manual_checks:
-  - {id: P-S01, title: "Схема свай и отклонений соответствует листу 1", severity: critical}
-  - {id: P-S02, title: "Схема свай и отклонений соответствует листу 2", severity: critical}
-  - {id: P-S03, title: "Схема свай, ростверка и исполнительных данных соответствует листу 3", severity: critical}
+  - {id: P-S01, title: "Лист 1: схема свай и их отклонений соответствует эталону", severity: critical}
+  - {id: P-S02, title: "Лист 2: схема свай и исполнительные данные соответствуют эталону", severity: critical}
+  - {id: P-S03, title: "Лист 3: схема свай/ростверка и исполнительные данные соответствуют эталону", severity: critical}
   - {id: P-G01, title: "Координатная/исполнительная ведомость соответствует эталону", severity: critical}
