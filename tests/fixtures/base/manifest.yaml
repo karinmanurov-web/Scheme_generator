@@ -1,8 +1,8 @@
 id: base
 name: "Подбетонка"
-source: "#U041f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430/#U043f#U043e#U0434#U0431#U0435#U0442.dxf"
+source: "Подбетонка/подбет.dxf"
 reference:
-  file: "#U041f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430/34 #U043f#U043e#U0434#U0431#U0435#U0442#U043e#U043d#U043a#U0430 #U043f#U0435#U0440#U0435#U0445 #U043f#U043b#U0438#U0442#U044b.pdf"
+  file: "Подбетонка/34 подбетонка переход плиты.pdf"
   pages: 6
   sheets:
     - {id: sheet_01, page: 1, title: "Бетонная подготовка под монолитную переходную плиту"}
@@ -15,12 +15,20 @@ algorithm:
   module: algo_base
   function: run
 checks:
-  min_entity_count: 1
-  required_entity_types: [LINE, TEXT]
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ИС_Оформление_Штамп"]
+    project_dimensions: ["ИС_Размеры_Проект_Факт"]
+    actual_dimensions: ["ИС_Размеры_Проект_Факт"]
+  required_output_layer_any:
+    - ["ИС_Высотные_Отметки"]
+    - ["ИС_Текст"]
 manual_checks:
-  - {id: B-S01, title: "Бетонная подготовка и исполнительные размеры соответствуют листу 1", severity: critical}
-  - {id: B-S02, title: "Исполнительные отметки и размеры соответствуют листу 2", severity: critical}
-  - {id: B-S03, title: "Цоколи и переходная плита соответствуют листу 3", severity: critical}
-  - {id: B-S04, title: "Переходная плита Пл-1 соответствует листу 4", severity: critical}
-  - {id: B-S05, title: "Цоколи и переходная плита соответствуют листу 5", severity: critical}
-  - {id: B-S06, title: "Переходная плита Пл-1 соответствует листу 6", severity: critical}
+  - {id: B-S01, title: "Лист 1: бетонная подготовка и исполнительные размеры соответствуют эталону", severity: critical}
+  - {id: B-S02, title: "Лист 2: исполнительные отметки и размеры соответствуют эталону", severity: critical}
+  - {id: B-S03, title: "Лист 3: цоколи и переходная плита соответствуют эталону", severity: critical}
+  - {id: B-S04, title: "Лист 4: переходная плита Пл-1 соответствует эталону", severity: critical}
+  - {id: B-S05, title: "Лист 5: цоколи и переходная плита соответствуют эталону", severity: critical}
+  - {id: B-S06, title: "Лист 6: переходная плита Пл-1 соответствует эталону", severity: critical}
