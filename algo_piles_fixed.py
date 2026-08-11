@@ -12,7 +12,6 @@ geometry while source entities remain available in the resulting DXF.
 """
 
 import algo_piles as _piles
-import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 
 ALGORITHM_NAME = _piles.ALGORITHM_NAME
@@ -37,6 +36,8 @@ _GENERATED_LAYERS = {
     "ИСП_Размеры_Факт",
 }
 
+_ORIGINAL_EXTENTS = ezdxf_bbox.extents
+
 
 def _generated_extents(layout):
     """Return bounds only for entities produced by the pile generator."""
@@ -54,9 +55,6 @@ def _generated_extents(layout):
     return box
 
 
-_ORIGINAL_EXTENTS = ezdxf_bbox.extents
-
-
 def _patched_extents(entities, *args, **kwargs):
     """Intercept only modelspace-wide bbox requests; delegate entity calls."""
     if hasattr(entities, "name") and getattr(entities, "name", None) == "Model":
@@ -68,7 +66,9 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         stamp_data=None, table_data=None):
     """Run the original algorithm with generated-geometry frame bounds."""
     original_extents = ezdxf_bbox.extents
+    original_safe_extents = _piles.safe_extents
     ezdxf_bbox.extents = _patched_extents
+    _piles.safe_extents = _generated_extents
     try:
         return _piles.run(
             input_dxf,
@@ -79,6 +79,7 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
             table_data=table_data,
         )
     finally:
+        _piles.safe_extents = original_safe_extents
         ezdxf_bbox.extents = original_extents
 
 
