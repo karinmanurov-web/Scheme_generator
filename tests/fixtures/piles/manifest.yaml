@@ -1,0 +1,44 @@
+id: piles
+name: "Свайный фундамент"
+source: "Свайный фундамент/сваи.dxf"
+reference:
+  file: "Свайный фундамент/5 акт.pdf"
+  pages: 3
+  sheets:
+    - {id: sheet_01, page: 1, title: "Срубка голов свай, устройство опалубки бетонной подготовки"}
+    - {id: sheet_02, page: 2, title: "Срубка голов свай, устройство опалубки"}
+    - {id: sheet_03, page: 3, title: "Срубка голов свай, устройство опалубки"}
+algorithm:
+  module: algo_piles_fixed
+  function: run
+presentation:
+  hide_source_layers: true
+  generated_layers:
+    - "Сваи_Проект"
+    - "Оси_Проект"
+    - "Исполнительная_Номера"
+    - "Исполнительная_Размеры"
+    - "Исполнительная_Отклонения"
+    - "Исполнительная_Ростверк"
+    - "Исполнительная_Оси_Опор"
+    - "Исполнительная_Оформление"
+    - "ИСП_Текст"
+    - "ИСП_Таблица"
+    - "ИСП_Размеры_Проект"
+    - "ИСП_Размеры_Факт"
+    - "ГОСТ_Рамка"
+checks:
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ГОСТ_Рамка"]
+    project_dimensions: ["ИСП_Размеры_Проект"]
+    actual_dimensions: ["ИСП_Размеры_Факт"]
+  required_output_layer_any:
+    - ["ИСП_Текст"]
+manual_checks:
+  - {id: P-S01, title: "Лист 1: схема свай и их отклонений соответствует эталону", severity: critical}
+  - {id: P-S02, title: "Лист 2: схема свай и исполнительные данные соответствуют эталону", severity: critical}
+  - {id: P-S03, title: "Лист 3: схема свай/ростверка и исполнительные данные соответствуют эталону", severity: critical}
+  - {id: P-G01, title: "Координатная/исполнительная ведомость соответствует эталону", severity: critical}
