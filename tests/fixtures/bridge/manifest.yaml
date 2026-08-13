@@ -8,7 +8,7 @@ reference:
     - {id: sheet_01, page: 1, title: "Устройство монолитной плиты пролетного строения"}
     - {id: sheet_02, page: 2, title: "Пролетное строение"}
 algorithm:
-  module: algo_bridge
+  module: algo_bridge_layout
   function: run
 checks:
   min_entity_count: 100
