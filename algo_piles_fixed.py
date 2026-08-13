@@ -26,31 +26,21 @@ a# deviation generation in algo_piles.
 process_dxf_to_asbuilt_scheme = _piles.process_dxf_to_asbuilt_scheme
 
 _GENERATED_LAYERS = {
-    "Сваи_Проект",
-    "Оси_Проект",
-    "Исполнительная_Номера",
-    "Исполнительная_Размеры",
-    "Исполнительная_Отклонения",
-    "Исполнительная_Ростверк",
-    "Исполнительная_Оси_Опор",
-    "Исполнительная_Оформление",
-    "ИСП_Текст",
-    "ИСП_Таблица",
-    "ИСП_Размеры_Проект",
-    "ИСП_Размеры_Факт",
-    "ГОСТ_Рамка",
+    "Сваи_Проект", "Оси_Проект", "Исполнительная_Номера",
+    "Исполнительная_Размеры", "Исполнительная_Отклонения",
+    "Исполнительная_Ростверк", "Исполнительная_Оси_Опор",
+    "Исполнительная_Оформление", "ИСП_Текст", "ИСП_Таблица",
+    "ИСП_Размеры_Проект", "ИСП_Размеры_Факт", "ГОСТ_Рамка",
 }
 
 _ORIGINAL_EXTENTS = ezdxf_bbox.extents
 
 
 def _generated_extents(layout):
-    """Return bounds only for entities produced by the pile generator."""
     box = ezdxf_bbox.BoundingBox()
     for entity in layout:
         try:
-            layer = entity.dxf.layer
-            if layer not in _GENERATED_LAYERS:
+            if entity.dxf.layer not in _GENERATED_LAYERS:
                 continue
             entity_box = _ORIGINAL_EXTENTS([entity])
             if entity_box.has_data:
@@ -61,27 +51,24 @@ def _generated_extents(layout):
 
 
 def _patched_extents(entities, *args, **kwargs):
-    """Intercept only modelspace-wide bbox requests; delegate entity calls."""
     if hasattr(entities, "name") and getattr(entities, "name", None) == "Model":
         return _generated_extents(entities)
     return _ORIGINAL_EXTENTS(entities, *args, **kwargs)
 
 
 def _snapshot_source_layers(doc):
-    """Capture layers present before generation, without relying on their names."""
     return {layer.dxf.name for layer in doc.layers}
 
 
 def _hide_source_layers(doc, source_layers):
-    """Hide pre-existing layers; leave all generator-created layers visible."""
+    """Hide pre-existing layers; leave generator-created layers visible."""
     for layer_name in source_layers:
         if layer_name in _GENERATED_LAYERS or layer_name not in doc.layers:
             continue
         try:
             layer = doc.layers.get(layer_name)
-            # ezdxf exposes layer visibility through the LayerTableRecord
-            # on/off methods. Calling off() is important: assigning to an
-            # attribute named ``off`` does not change the DXF layer flags.
+            # ezdxf uses the LayerTableRecord on()/off() methods to change
+            # the DXF layer visibility flag.
             layer.off()
         except Exception:
             continue
@@ -92,32 +79,20 @@ def _polyline_center(entity):
     if len(points) < 3:
         return None
     xy = [(float(p[0]), float(p[1])) for p in points]
-    return (
-        sum(p[0] for p in xy) / len(xy),
-        sum(p[1] for p in xy) / len(xy),
-    )
+    return (sum(p[0] for p in xy) / len(xy), sum(p[1] for p in xy) / len(xy))
 
 
 def _build_pile_layout_diagnostic(doc):
-    """Extract generated pile positions without changing their existing IDs.
-
-    The current generator draws one closed square per pile on Сваи_Проект and
-    one label on Исполнительная_Номера. We use that generated geometry as an
-    observation point, not as a new source of truth for the algorithm.
-    """
+    """Extract generated pile positions without changing existing IDs."""
     msp = doc.modelspace()
     generated = []
-
     for entity in msp:
         try:
-            if entity.dxf.layer != "Сваи_Проект":
-                continue
-            if entity.dxftype() not in ("LWPOLYLINE", "POLYLINE"):
+            if entity.dxf.layer != "Сваи_Проект" or entity.dxftype() not in ("LWPOLYLINE", "POLYLINE"):
                 continue
             center = _polyline_center(entity)
-            if center is None:
-                continue
-            generated.append(center)
+            if center is not None:
+                generated.append(center)
         except Exception:
             continue
 
@@ -128,7 +103,6 @@ def _build_pile_layout_diagnostic(doc):
 
     geometric = sorted(unique, key=lambda p: (-p[1], p[0]))
     geometric_rank = {point: idx for idx, point in enumerate(geometric, start=1)}
-
     rows = []
     for idx, (x, y) in enumerate(unique, start=1):
         nearest = None
@@ -139,24 +113,15 @@ def _build_pile_layout_diagnostic(doc):
             if nearest is None or d < nearest:
                 nearest = d
         rows.append({
-            "current_id": idx,
-            "x": round(x, 3),
-            "y": round(y, 3),
+            "current_id": idx, "x": round(x, 3), "y": round(y, 3),
             "nearest_neighbor_distance": round(nearest, 3) if nearest is not None else None,
             "geometric_rank": geometric_rank[(x, y)],
         })
 
     if unique:
-        xs = [p[0] for p in unique]
-        ys = [p[1] for p in unique]
-        bounds = {
-            "min_x": min(xs),
-            "min_y": min(ys),
-            "max_x": max(xs),
-            "max_y": max(ys),
-            "width": max(xs) - min(xs),
-            "height": max(ys) - min(ys),
-        }
+        xs, ys = [p[0] for p in unique], [p[1] for p in unique]
+        bounds = {"min_x": min(xs), "min_y": min(ys), "max_x": max(xs), "max_y": max(ys),
+                  "width": max(xs) - min(xs), "height": max(ys) - min(ys)}
     else:
         bounds = None
 
@@ -166,38 +131,26 @@ def _build_pile_layout_diagnostic(doc):
         "algorithm_id": "piles",
         "canonical_numbering": "existing generator order; diagnostic does not renumber",
         "geometric_order": "Y descending, then X ascending",
-        "pile_count": len(rows),
-        "bounds": bounds,
-        "piles": rows,
+        "pile_count": len(rows), "bounds": bounds, "piles": rows,
     }
 
 
 def _write_pile_layout_artifacts(output_dxf):
-    """Write JSON/CSV diagnostics next to the generated DXF."""
     doc = __import__("ezdxf").readfile(output_dxf)
     diagnostic = _build_pile_layout_diagnostic(doc)
     base = Path(output_dxf)
-    json_path = base.with_name(base.stem + "_pile_layout.json")
-    csv_path = base.with_name(base.stem + "_pile_layout.csv")
-
-    json_path.write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8")
-
+    base.with_name(base.stem + "_pile_layout.json").write_text(
+        json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     fields = ["current_id", "x", "y", "nearest_neighbor_distance", "geometric_rank"]
-    with csv_path.open("w", newline="", encoding="utf-8-sig") as fh:
+    with base.with_name(base.stem + "_pile_layout.csv").open("w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=fields)
         writer.writeheader()
         writer.writerows(diagnostic["piles"])
 
 
-def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
-        stamp_data=None, table_data=None):
-    """Run the original algorithm with generated-geometry frame bounds.
-
-    Source layers are hidden only after generation. This preserves the original
-    algorithm and avoids any dependency on project-specific source layer names.
-    """
+def run(input_dxf, output_dxf, output_csv=None, log_callback=None, stamp_data=None, table_data=None):
     import ezdxf
-
     source_doc = ezdxf.readfile(input_dxf)
     source_layers = _snapshot_source_layers(source_doc)
 
@@ -206,14 +159,9 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
     ezdxf_bbox.extents = _patched_extents
     _piles.safe_extents = _generated_extents
     try:
-        result = _piles.run(
-            input_dxf,
-            output_dxf,
-            output_csv,
-            log_callback=log_callback,
-            stamp_data=stamp_data,
-            table_data=table_data,
-        )
+        result = _piles.run(input_dxf, output_dxf, output_csv,
+                            log_callback=log_callback, stamp_data=stamp_data,
+                            table_data=table_data)
     finally:
         _piles.safe_extents = original_safe_extents
         ezdxf_bbox.extents = original_extents
