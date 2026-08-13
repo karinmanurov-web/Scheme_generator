@@ -93,18 +93,24 @@ def _geometry_diagnostics(doc, msp) -> dict[str, Any]:
     frame_entities = [e for e in msp if str(getattr(e.dxf, "layer", "")) in frame_layers]
     frame_box = _bbox_for_entities(frame_entities)
 
+    by_layer: Counter[str] = Counter()
+    for entity in msp:
+        try:
+            by_layer[str(entity.dxf.layer)] += 1
+        except Exception:
+            continue
+
     diagnostics: dict[str, Any] = {
         "modelspace_bbox": _bbox_dict(all_box),
         "frame_bbox": _bbox_dict(frame_box),
         "frame_entity_count": len(frame_entities),
+        "entities_by_layer": dict(sorted(by_layer.items())),
     }
 
     if frame_box and frame_box.has_data:
         fw = abs(float(frame_box.extmax.x - frame_box.extmin.x))
         fh = abs(float(frame_box.extmax.y - frame_box.extmin.y))
         diagnostics["frame_aspect_ratio"] = round(fw / fh, 4) if fh else None
-        # A landscape A3 sheet is 420/297 ~= 1.414. We don't fail on this
-        # because projects may use other sheet sizes; it is a diagnostic only.
         diagnostics["frame_aspect_deviation_from_a3"] = round(abs((fw / fh if fh else 0.0) - 420 / 297), 4) if fh else None
 
     if all_box and frame_box and all_box.has_data and frame_box.has_data:
@@ -117,6 +123,40 @@ def _geometry_diagnostics(doc, msp) -> dict[str, Any]:
         diagnostics["model_to_frame_area_ratio"] = round((model_w * model_h) / (frame_w * frame_h), 4) if frame_w and frame_h else None
 
     return diagnostics
+
+
+def _presentation_check(evaluation: Evaluation, doc, msp, manifest: dict[str, Any]) -> None:
+    """Check presentation behavior without requiring source-layer names."""
+    presentation = manifest.get("presentation", {}) or {}
+    if not presentation.get("hide_source_layers"):
+        return
+
+    generated_layers = {str(v) for v in presentation.get("generated_layers", [])}
+    source_layer_count = 0
+    visible_source_layers: list[str] = []
+
+    for layer in doc.layers:
+        name = str(layer.dxf.name)
+        if name in generated_layers:
+            continue
+        if name.upper() == "DEFPOINTS":
+            continue
+        source_layer_count += 1
+        try:
+            if not bool(layer.is_off()):
+                visible_source_layers.append(name)
+        except Exception:
+            continue
+
+    evaluation.diagnostics["source_layer_count"] = source_layer_count
+    evaluation.diagnostics["visible_source_layers"] = sorted(visible_source_layers)
+    evaluation.add(
+        "PRESENTATION-SOURCE-LAYERS",
+        "Исходные слои скрыты в исполнительном представлении",
+        "critical",
+        "PASS" if not visible_source_layers else "FAIL",
+        ", ".join(sorted(visible_source_layers)) if visible_source_layers else "all source layers hidden",
+    )
 
 
 def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
@@ -144,89 +184,41 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
 
     checks = manifest.get("checks", {}) or {}
     min_entities = int(checks.get("min_entity_count", 1))
-    evaluation.add(
-        "DXF-COUNT",
-        f"В результате не менее {min_entities} объектов",
-        "critical",
-        "PASS" if total >= min_entities else "FAIL",
-        f"actual={total}",
-    )
+    evaluation.add("DXF-COUNT", f"В результате не менее {min_entities} объектов", "critical", "PASS" if total >= min_entities else "FAIL", f"actual={total}")
 
     required_types = checks.get("required_entity_types", []) or []
     for entity_type in required_types:
         actual = counts.get(str(entity_type).upper(), 0)
-        evaluation.add(
-            f"DXF-TYPE-{entity_type}",
-            f"В результате присутствуют {entity_type}",
-            "critical",
-            "PASS" if actual > 0 else "FAIL",
-            f"count={actual}",
-        )
+        evaluation.add(f"DXF-TYPE-{entity_type}", f"В результате присутствуют {entity_type}", "critical", "PASS" if actual > 0 else "FAIL", f"count={actual}")
 
     for layer_name in checks.get("required_output_layers", []) or []:
         present = str(layer_name) in layers
-        evaluation.add(
-            f"DXF-LAYER-{layer_name}",
-            f"Присутствует выходной слой {layer_name}",
-            "critical",
-            "PASS" if present else "FAIL",
-            "present" if present else "missing",
-        )
+        evaluation.add(f"DXF-LAYER-{layer_name}", f"Присутствует выходной слой {layer_name}", "critical", "PASS" if present else "FAIL", "present" if present else "missing")
 
     for index, group in enumerate(checks.get("required_output_layer_any", []) or [], start=1):
         options = [str(value) for value in group]
         matching = [name for name in options if name in layers]
-        evaluation.add(
-            f"DXF-LAYER-ANY-{index}",
-            "Присутствует хотя бы один слой из группы: " + " / ".join(options),
-            "critical",
-            "PASS" if matching else "FAIL",
-            ", ".join(matching) if matching else "none",
-        )
+        evaluation.add(f"DXF-LAYER-ANY-{index}", "Присутствует хотя бы один слой из группы: " + " / ".join(options), "critical", "PASS" if matching else "FAIL", ", ".join(matching) if matching else "none")
 
     for prefix in checks.get("required_output_layer_prefixes", []) or []:
         matching = sorted(layer for layer in layers if layer.startswith(str(prefix)))
-        evaluation.add(
-            f"DXF-LAYER-PREFIX-{prefix}",
-            f"Присутствуют выходные слои с префиксом {prefix}",
-            "critical",
-            "PASS" if matching else "FAIL",
-            ", ".join(matching) if matching else "none",
-        )
+        evaluation.add(f"DXF-LAYER-PREFIX-{prefix}", f"Присутствуют выходные слои с префиксом {prefix}", "critical", "PASS" if matching else "FAIL", ", ".join(matching) if matching else "none")
 
     text_min = checks.get("min_text_count")
     if text_min is not None:
         text_min = int(text_min)
-        evaluation.add(
-            "DXF-TEXT-COUNT",
-            f"В результате не менее {text_min} текстовых объектов",
-            "critical",
-            "PASS" if len(texts) >= text_min else "FAIL",
-            f"actual={len(texts)}",
-        )
+        evaluation.add("DXF-TEXT-COUNT", f"В результате не менее {text_min} текстовых объектов", "critical", "PASS" if len(texts) >= text_min else "FAIL", f"actual={len(texts)}")
 
     for rule in checks.get("text_contains", []) or []:
         needle = str(rule["text"] if isinstance(rule, dict) else rule)
         severity = str(rule.get("severity", "warning")) if isinstance(rule, dict) else "warning"
         found = any(needle.casefold() in value.casefold() for value in texts)
-        evaluation.add(
-            f"TEXT-{needle}",
-            f"Текст содержит «{needle}»",
-            severity,
-            "PASS" if found else "FAIL",
-            "found" if found else "missing",
-        )
+        evaluation.add(f"TEXT-{needle}", f"Текст содержит «{needle}»", severity, "PASS" if found else "FAIL", "found" if found else "missing")
 
     expected_contract = checks.get("output_contract", {}) or {}
     for layer_name in expected_contract.get("required_layers", []) or []:
         present = str(layer_name) in layers
-        evaluation.add(
-            f"CONTRACT-LAYER-{layer_name}",
-            f"Контракт: слой {layer_name}",
-            "critical",
-            "PASS" if present else "FAIL",
-            "present" if present else "missing",
-        )
+        evaluation.add(f"CONTRACT-LAYER-{layer_name}", f"Контракт: слой {layer_name}", "critical", "PASS" if present else "FAIL", "present" if present else "missing")
 
     for key, title, default_options in [
         ("project_dimensions", "Контракт: проектные размеры", ["ГОСТ_Размеры_Проект", "ИС_Размеры_Проект_Факт"]),
@@ -240,14 +232,9 @@ def evaluate_dxf(output_path: Path, manifest: dict[str, Any]) -> Evaluation:
         if not options:
             options = default_options
         matching = [str(name) for name in options if str(name) in layers]
-        evaluation.add(
-            f"CONTRACT-{key}",
-            title,
-            "critical",
-            "PASS" if matching else "FAIL",
-            ", ".join(matching) if matching else "none",
-        )
+        evaluation.add(f"CONTRACT-{key}", title, "critical", "PASS" if matching else "FAIL", ", ".join(matching) if matching else "none")
 
+    _presentation_check(evaluation, doc, msp, manifest)
     return evaluation
 
 
@@ -262,13 +249,7 @@ def evaluation_to_dict(evaluation: Evaluation) -> dict[str, Any]:
         "failed_critical": evaluation.failed_critical,
         "diagnostics": evaluation.diagnostics,
         "checks": [
-            {
-                "id": c.check_id,
-                "title": c.title,
-                "severity": c.severity,
-                "status": c.status,
-                "details": c.details,
-            }
+            {"id": c.check_id, "title": c.title, "severity": c.severity, "status": c.status, "details": c.details}
             for c in evaluation.checks
         ],
     }
