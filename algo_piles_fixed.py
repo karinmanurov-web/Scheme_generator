@@ -5,10 +5,15 @@ SP-compliant deviations untouched. It changes only presentation geometry:
 frame bounds are based on generated geometry and source drawing layers are
 hidden after generation so the output is an actual execution-sheet view.
 
-No source layer/block names are required for the bounds rule. We snapshot the
-source layers before running the original algorithm and hide only those layers
-that existed before generation; our generated layers remain visible.
+It also emits a machine-readable pile layout diagnostic next to the generated
+DXF. The diagnostic is deliberately observational: it does not renumber piles
+or change the existing algorithm.
 """
+
+import csv
+import json
+import math
+from pathlib import Path
 
 import algo_piles as _piles
 from ezdxf import bbox as ezdxf_bbox
@@ -79,6 +84,112 @@ def _hide_source_layers(doc, source_layers):
             continue
 
 
+def _polyline_center(entity):
+    points = list(entity.get_points())
+    if len(points) < 3:
+        return None
+    xy = [(float(p[0]), float(p[1])) for p in points]
+    return (
+        sum(p[0] for p in xy) / len(xy),
+        sum(p[1] for p in xy) / len(xy),
+    )
+
+
+def _build_pile_layout_diagnostic(doc):
+    """Extract generated pile positions without changing their existing IDs.
+
+    The current generator draws one closed square per pile on Сваи_Проект and
+    one label on Исполнительная_Номера. We use that generated geometry as an
+    observation point, not as a new source of truth for the algorithm.
+    """
+    msp = doc.modelspace()
+    generated = []
+
+    for entity in msp:
+        try:
+            if entity.dxf.layer != "Сваи_Проект":
+                continue
+            if entity.dxftype() not in ("LWPOLYLINE", "POLYLINE"):
+                continue
+            center = _polyline_center(entity)
+            if center is None:
+                continue
+            generated.append(center)
+        except Exception:
+            continue
+
+    # De-duplicate centers defensively; a future renderer must not silently
+    # create duplicate diagnostic rows if it adds another outline.
+    unique = []
+    for center in generated:
+        if not any(math.hypot(center[0] - other[0], center[1] - other[1]) < 0.1 for other in unique):
+            unique.append(center)
+
+    # Existing IDs remain the canonical order. Geometric order is diagnostic
+    # only: Y descending, then X ascending, with no mutation of the DXF.
+    geometric = sorted(unique, key=lambda p: (-p[1], p[0]))
+    geometric_rank = {point: idx for idx, point in enumerate(geometric, start=1)}
+
+    rows = []
+    for idx, (x, y) in enumerate(unique, start=1):
+        nearest = None
+        for j, (ox, oy) in enumerate(unique, start=1):
+            if j == idx:
+                continue
+            d = math.hypot(x - ox, y - oy)
+            if nearest is None or d < nearest:
+                nearest = d
+        rows.append({
+            "current_id": idx,
+            "x": round(x, 3),
+            "y": round(y, 3),
+            "nearest_neighbor_distance": round(nearest, 3) if nearest is not None else None,
+            "geometric_rank": geometric_rank[(x, y)],
+        })
+
+    if unique:
+        xs = [p[0] for p in unique]
+        ys = [p[1] for p in unique]
+        bounds = {
+            "min_x": min(xs),
+            "min_y": min(ys),
+            "max_x": max(xs),
+            "max_y": max(ys),
+            "width": max(xs) - min(xs),
+            "height": max(ys) - min(ys),
+        }
+    else:
+        bounds = None
+
+    return {
+        "schema_version": 1,
+        "purpose": "diagnostic_only",
+        "algorithm_id": "piles",
+        "canonical_numbering": "existing generator order; diagnostic does not renumber",
+        "geometric_order": "Y descending, then X ascending",
+        "pile_count": len(rows),
+        "bounds": bounds,
+        "piles": rows,
+    }
+
+
+def _write_pile_layout_artifacts(output_dxf):
+    """Write JSON/CSV diagnostics next to the generated DXF."""
+    doc = __import__("ezdxf").readfile(output_dxf)
+    diagnostic = _build_pile_layout_diagnostic(doc)
+    base = Path(output_dxf)
+    json_path = base.with_name(base.stem + "_pile_layout.json")
+    csv_path = base.with_name(base.stem + "_pile_layout.csv")
+
+    json_path.write_text(json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    fields = ["current_id", "x", "y", "nearest_neighbor_distance", "geometric_rank"]
+    with csv_path.open("w", newline="", encoding="utf-8-sig") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(diagnostic["piles"])
+
+
 def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         stamp_data=None, table_data=None):
     """Run the original algorithm with generated-geometry frame bounds.
@@ -117,8 +228,9 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         doc_out = ezdxf.readfile(output_dxf)
         _hide_source_layers(doc_out, source_layers)
         doc_out.saveas(output_dxf)
+        _write_pile_layout_artifacts(output_dxf)
     except Exception as exc:
-        _piles._log(f"[ПРЕДУПРЕЖДЕНИЕ] Не удалось скрыть исходные слои: {exc}", log_callback)
+        _piles._log(f"[ПРЕДУПРЕЖДЕНИЕ] Не удалось подготовить диагностические артефакты: {exc}", log_callback)
 
     return result
 
