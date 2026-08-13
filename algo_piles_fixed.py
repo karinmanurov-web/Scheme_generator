@@ -22,7 +22,7 @@ ALGORITHM_NAME = _piles.ALGORITHM_NAME
 PREVIEW_IMAGE = getattr(_piles, "PREVIEW_IMAGE", "preview_piles.png")
 
 # Preserve the existing public API and, importantly, the existing random
-# deviation generation in algo_piles.
+a# deviation generation in algo_piles.
 process_dxf_to_asbuilt_scheme = _piles.process_dxf_to_asbuilt_scheme
 
 _GENERATED_LAYERS = {
@@ -79,7 +79,10 @@ def _hide_source_layers(doc, source_layers):
             continue
         try:
             layer = doc.layers.get(layer_name)
-            layer.off = True
+            # ezdxf exposes layer visibility through the LayerTableRecord
+            # on/off methods. Calling off() is important: assigning to an
+            # attribute named ``off`` does not change the DXF layer flags.
+            layer.off()
         except Exception:
             continue
 
@@ -118,15 +121,11 @@ def _build_pile_layout_diagnostic(doc):
         except Exception:
             continue
 
-    # De-duplicate centers defensively; a future renderer must not silently
-    # create duplicate diagnostic rows if it adds another outline.
     unique = []
     for center in generated:
         if not any(math.hypot(center[0] - other[0], center[1] - other[1]) < 0.1 for other in unique):
             unique.append(center)
 
-    # Existing IDs remain the canonical order. Geometric order is diagnostic
-    # only: Y descending, then X ascending, with no mutation of the DXF.
     geometric = sorted(unique, key=lambda p: (-p[1], p[0]))
     geometric_rank = {point: idx for idx, point in enumerate(geometric, start=1)}
 
@@ -199,9 +198,6 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
     """
     import ezdxf
 
-    # Snapshot the input layer set before the original algorithm adds its own
-    # presentation layers. The original algorithm reopens the input itself, so
-    # we keep the snapshot by path and apply it to the saved result afterward.
     source_doc = ezdxf.readfile(input_dxf)
     source_layers = _snapshot_source_layers(source_doc)
 
@@ -222,8 +218,6 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         _piles.safe_extents = original_safe_extents
         ezdxf_bbox.extents = original_extents
 
-    # Turn the generated DXF into a clean presentation without deleting source
-    # entities. A contractor can still inspect them by turning layers back on.
     try:
         doc_out = ezdxf.readfile(output_dxf)
         _hide_source_layers(doc_out, source_layers)
