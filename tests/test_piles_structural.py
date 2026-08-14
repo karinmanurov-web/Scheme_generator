@@ -32,14 +32,9 @@ def test_current_grillage_is_detected_as_two_structural_members() -> None:
     assert SOURCE.exists(), f"Pile fixture is missing: {SOURCE}"
     doc = ezdxf.readfile(SOURCE)
 
-    # The production algorithm detects the pile INSERTs; for this fixture they
-    # are the 0.35x0.35 geometric block repeated across the field.
-    pile_block_name = "A$C11282C60"
-    pile_centers = [
-        (float(entity.dxf.insert.x), float(entity.dxf.insert.y))
-        for entity in doc.modelspace()
-        if entity.dxftype() == "INSERT" and entity.dxf.name == pile_block_name
-    ]
+    # Use the same geometry-driven source pile discovery as the structural
+    # post-processor; the detector itself does not know block names.
+    pile_centers = [item["center"] for item in _source_pile_orientations(doc)]
 
     candidates = detect_grillage(doc, pile_centers)
     assert len(candidates) == 2
