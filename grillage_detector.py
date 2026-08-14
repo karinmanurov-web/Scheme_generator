@@ -1,8 +1,7 @@
 """Geometry-based detection helpers for pile-foundation execution sheets.
 
-The detector intentionally avoids source layer/block names. It uses geometry,
-spatial relationships and (when available) hatch evidence.  It is conservative:
-only high-confidence grillage candidates are returned for rendering.
+The detector never relies on source layer/block names. It recognizes grillage
+from geometry and its relationship to the detected pile field.
 """
 
 from __future__ import annotations
@@ -46,15 +45,20 @@ class GrillageCandidate:
         return max(self.bbox[2] - self.bbox[0], self.bbox[3] - self.bbox[1])
 
 
-def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
+def _distance(a, b):
     return math.hypot(a[0] - b[0], a[1] - b[1])
 
 
-def _angle_mod_pi(dx: float, dy: float) -> float:
+def _angle_mod_pi(dx, dy):
     return math.atan2(dy, dx) % math.pi
 
 
-def _point_segment_distance(point: tuple[float, float], seg: GeometrySegment) -> float:
+def _angle_diff(a, b):
+    d = abs((a - b) % math.pi)
+    return min(d, math.pi - d)
+
+
+def _point_segment_distance(point, seg):
     px, py = point
     ax, ay = seg.start
     bx, by = seg.end
@@ -67,8 +71,7 @@ def _point_segment_distance(point: tuple[float, float], seg: GeometrySegment) ->
     return _distance(point, q)
 
 
-def _entity_segments(entity, transform=None) -> list[GeometrySegment]:
-    """Extract straight segments from LINE/LWPOLYLINE/POLYLINE entities."""
+def _entity_segments(entity, transform=None):
     etype = entity.dxftype()
     if etype == "LINE":
         points = [
@@ -87,11 +90,10 @@ def _entity_segments(entity, transform=None) -> list[GeometrySegment]:
     else:
         return []
 
-    result: list[GeometrySegment] = []
+    result = []
     for a, b in zip(points, points[1:]):
         if transform:
-            a = transform(a)
-            b = transform(b)
+            a, b = transform(a), transform(b)
         length = _distance(a, b)
         if length < 100.0:
             continue
@@ -109,7 +111,6 @@ def _entity_segments(entity, transform=None) -> list[GeometrySegment]:
 
 
 def _world_transform(insert, parent_transform):
-    """Return an affine point transform for an INSERT in a nested block."""
     ix, iy = float(insert.dxf.insert.x), float(insert.dxf.insert.y)
     sx = float(getattr(insert.dxf, "xscale", 1.0))
     sy = float(getattr(insert.dxf, "yscale", 1.0))
@@ -124,9 +125,8 @@ def _world_transform(insert, parent_transform):
     return lambda point: parent_transform(local(point))
 
 
-def collect_world_segments(doc) -> list[GeometrySegment]:
-    """Collect straight structural geometry from modelspace and nested blocks."""
-    segments: list[GeometrySegment] = []
+def collect_world_segments(doc):
+    segments = []
 
     def walk(entities, parent_transform=lambda p: p, stack=()):
         for entity in entities:
@@ -137,65 +137,42 @@ def collect_world_segments(doc) -> list[GeometrySegment]:
                 name = str(entity.dxf.name)
                 if name not in doc.blocks or name in stack:
                     continue
-                walk(doc.blocks[name], _world_transform(entity, parent_transform), stack + (name,))
+                walk(
+                    doc.blocks[name],
+                    _world_transform(entity, parent_transform),
+                    stack + (name,),
+                )
 
     walk(doc.modelspace())
     return segments
 
 
-def collect_hatch_boxes(doc) -> list[tuple[float, float, float, float]]:
+def collect_hatch_boxes(doc):
     boxes = []
     for hatch in doc.modelspace().query("HATCH"):
         try:
             box = ezdxf_bbox.extents([hatch])
             if box.has_data:
-                boxes.append((float(box.extmin.x), float(box.extmin.y), float(box.extmax.x), float(box.extmax.y)))
+                boxes.append(
+                    (
+                        float(box.extmin.x),
+                        float(box.extmin.y),
+                        float(box.extmax.x),
+                        float(box.extmax.y),
+                    )
+                )
         except Exception:
             continue
     return boxes
 
 
-def _bbox_of_segments(segments: Iterable[GeometrySegment]):
+def _bbox_of_segments(segments):
     segs = list(segments)
     if not segs:
         return None
     xs = [p for s in segs for p in (s.start[0], s.end[0])]
     ys = [p for s in segs for p in (s.start[1], s.end[1])]
     return min(xs), min(ys), max(xs), max(ys)
-
-
-def _box_overlap(a, b, tolerance=250.0):
-    return not (
-        a[2] < b[0] - tolerance or b[2] < a[0] - tolerance or
-        a[3] < b[1] - tolerance or b[3] < a[1] - tolerance
-    )
-
-
-def _candidate_from_hatch(hatch_box, segments, pile_centers):
-    hx0, hy0, hx1, hy1 = hatch_box
-    expanded = (hx0 - 700, hy0 - 700, hx1 + 700, hy1 + 700)
-    matched = []
-    for seg in segments:
-        sb = (min(seg.start[0], seg.end[0]), min(seg.start[1], seg.end[1]), max(seg.start[0], seg.end[0]), max(seg.start[1], seg.end[1]))
-        if _box_overlap(sb, expanded, tolerance=50):
-            matched.append(seg)
-
-    if not matched:
-        return None
-
-    near_piles = sum(
-        1 for point in pile_centers
-        if expanded[0] <= point[0] <= expanded[2] and expanded[1] <= point[1] <= expanded[3]
-    )
-    angle = _dominant_segment_angle(matched)
-    confidence = 0.60
-    if near_piles >= 6:
-        confidence += 0.15
-    if len(matched) >= 4:
-        confidence += 0.10
-    if max(hx1 - hx0, hy1 - hy0) >= 5 * max(1.0, min(hx1 - hx0, hy1 - hy0)):
-        confidence += 0.10
-    return GrillageCandidate(matched, [hatch_box], hatch_box, angle, min(confidence, 0.99), "hatch + elongated structural boundary + nearby piles")
 
 
 def _dominant_segment_angle(segments):
@@ -207,88 +184,281 @@ def _dominant_segment_angle(segments):
     return 0.5 * math.atan2(s, c)
 
 
-def detect_grillage(doc, pile_centers: Iterable[tuple[float, float]]) -> list[GrillageCandidate]:
-    """Return only high-confidence grillage candidates.
+def _piles_near_corridor(pile_centers, segments, padding=700.0):
+    if not segments:
+        return []
+    return [
+        point
+        for point in pile_centers
+        if min(_point_segment_distance(point, seg) for seg in segments) <= padding
+    ]
 
-    Hatches are strong evidence but not required.  For line-only grillage the
-    detector accepts a closed, elongated line group with nearby piles.  Open
-    pairs of lines are deliberately left as diagnostic-only candidates so a
-    diagonal wing/abutment cannot be mistaken for a grillage.
+
+def _two_sided_pile_evidence(pile_centers, long_a, long_b):
+    """Check that piles flank the member instead of merely lying along it."""
+    dx = long_a.end[0] - long_a.start[0]
+    dy = long_a.end[1] - long_a.start[1]
+    length = math.hypot(dx, dy)
+    if length <= 1e-6:
+        return 0, 0, 0.0
+
+    ux, uy = dx / length, dy / length
+    nx, ny = -uy, ux
+    mx = (long_a.center[0] + long_b.center[0]) / 2.0
+    my = (long_a.center[1] + long_b.center[1]) / 2.0
+    separation = abs((long_b.center[0] - long_a.center[0]) * nx + (long_b.center[1] - long_a.center[1]) * ny)
+
+    left = right = 0
+    for px, py in pile_centers:
+        along = (px - mx) * ux + (py - my) * uy
+        lateral = (px - mx) * nx + (py - my) * ny
+        if abs(along) > length * 0.60:
+            continue
+        if 0.15 * separation <= lateral <= 1.6 * separation:
+            left += 1
+        elif -1.6 * separation <= lateral <= -0.15 * separation:
+            right += 1
+
+    return left, right, separation
+
+
+def _closed_polyline_candidates(doc, pile_centers):
+    candidates = []
+    for entity in doc.modelspace():
+        if entity.dxftype() not in ("LWPOLYLINE", "POLYLINE"):
+            continue
+        try:
+            if entity.dxftype() == "LWPOLYLINE":
+                if not entity.closed:
+                    continue
+            elif not entity.is_closed:
+                continue
+
+            segs = _entity_segments(entity)
+            if len(segs) != 4:
+                continue
+
+            lengths = sorted((seg.length for seg in segs), reverse=True)
+            long_side, short_side = lengths[0], lengths[-1]
+            if long_side < 3000.0 or short_side > 2500.0 or long_side / max(short_side, 1.0) < 5.0:
+                continue
+
+            if _angle_diff(segs[0].angle, segs[2].angle) > math.radians(3):
+                continue
+            if _angle_diff(segs[1].angle, segs[3].angle) > math.radians(3):
+                continue
+
+            near = _piles_near_corridor(pile_centers, segs, padding=max(700.0, short_side * 0.9))
+            if len(near) < 6:
+                continue
+
+            bbox = _bbox_of_segments(segs)
+            angle = _dominant_segment_angle([segs[0], segs[2]])
+            candidates.append(
+                GrillageCandidate(
+                    segments=segs,
+                    bbox=bbox,
+                    angle=angle,
+                    confidence=0.94,
+                    reason="closed elongated rectangular geometry + nearby pile field",
+                )
+            )
+        except Exception:
+            continue
+    return candidates
+
+
+def _line_pair_candidates(segments, pile_centers):
+    candidates = []
+    long_segments = [seg for seg in segments if seg.length >= 3000.0]
+
+    for i, first in enumerate(long_segments):
+        for second in long_segments[i + 1:]:
+            if _angle_diff(first.angle, second.angle) > math.radians(3):
+                continue
+
+            dx = first.end[0] - first.start[0]
+            dy = first.end[1] - first.start[1]
+            length = math.hypot(dx, dy)
+            if length <= 1e-6:
+                continue
+            ux, uy = dx / length, dy / length
+            nx, ny = -uy, ux
+
+            separation = abs((second.center[0] - first.center[0]) * nx + (second.center[1] - first.center[1]) * ny)
+            if not (150.0 <= separation <= 2500.0):
+                continue
+
+            projections_second = [
+                (second.start[0] - first.start[0]) * ux + (second.start[1] - first.start[1]) * uy,
+                (second.end[0] - first.start[0]) * ux + (second.end[1] - first.start[1]) * uy,
+            ]
+            lo = max(0.0, min(projections_second))
+            hi = min(length, max(projections_second))
+            overlap = max(0.0, hi - lo)
+            if overlap / min(first.length, second.length) < 0.60:
+                continue
+
+            left, right, _ = _two_sided_pile_evidence(pile_centers, first, second)
+            if left < 3 or right < 3:
+                continue
+
+            bbox = _bbox_of_segments([first, second])
+            candidates.append(
+                GrillageCandidate(
+                    segments=[first, second],
+                    bbox=bbox,
+                    angle=first.angle,
+                    confidence=0.88,
+                    reason="two parallel long members + two-sided pile field",
+                )
+            )
+    return candidates
+
+
+def _hatch_boundary_segments(hatch_box, segments):
+    """Select the structural boundary represented by a hatch, not all nearby lines."""
+    hx0, hy0, hx1, hy1 = hatch_box
+    tol = 100.0
+
+    inside = []
+    for seg in segments:
+        if (
+            hx0 - tol <= seg.start[0] <= hx1 + tol
+            and hy0 - tol <= seg.start[1] <= hy1 + tol
+            and hx0 - tol <= seg.end[0] <= hx1 + tol
+            and hy0 - tol <= seg.end[1] <= hy1 + tol
+        ):
+            inside.append(seg)
+
+    if not inside:
+        return []
+
+    longest = max(inside, key=lambda s: s.length)
+    dominant = longest.angle
+    parallel = [
+        seg for seg in inside
+        if _angle_diff(seg.angle, dominant) <= math.radians(3.0)
+    ]
+    parallel.sort(key=lambda s: s.length, reverse=True)
+
+    chosen = []
+    for seg in parallel:
+        if seg.length < 0.35 * parallel[0].length:
+            continue
+        if not any(
+            _distance(seg.center, other.center) < max(seg.length, other.length) * 0.05
+            for other in chosen
+        ):
+            chosen.append(seg)
+        if len(chosen) == 2:
+            break
+
+    if len(chosen) < 2:
+        chosen = parallel[:2]
+
+    if len(chosen) >= 2:
+        short = [
+            seg for seg in inside
+            if _angle_diff(seg.angle, chosen[0].angle) >= math.radians(80.0)
+        ]
+        for seg in sorted(short, key=lambda s: s.length):
+            if any(
+                min(
+                    _distance(seg.start, long_seg.start),
+                    _distance(seg.start, long_seg.end),
+                    _distance(seg.end, long_seg.start),
+                    _distance(seg.end, long_seg.end),
+                ) <= 150.0
+                for long_seg in chosen
+            ):
+                chosen.append(seg)
+                if len(chosen) == 4:
+                    break
+
+    return chosen
+
+
+def _hatch_candidates(doc, pile_centers, segments):
+    candidates = []
+    for hatch_box in collect_hatch_boxes(doc):
+        boundary = _hatch_boundary_segments(hatch_box, segments)
+        if len(boundary) < 2:
+            continue
+
+        near = _piles_near_corridor(pile_centers, boundary, padding=900.0)
+        if len(near) < 6:
+            continue
+
+        angle = _dominant_segment_angle(boundary)
+        candidates.append(
+            GrillageCandidate(
+                segments=boundary,
+                hatch_boxes=[hatch_box],
+                bbox=hatch_box,
+                angle=angle,
+                confidence=0.97,
+                reason="hatch + detected boundary geometry + nearby pile field",
+            )
+        )
+    return candidates
+
+
+def _overlap(a, b, tolerance=100.0):
+    if not a or not b:
+        return False
+    return not (
+        a[2] < b[0] - tolerance
+        or b[2] < a[0] - tolerance
+        or a[3] < b[1] - tolerance
+        or b[3] < a[1] - tolerance
+    )
+
+
+def detect_grillage(doc, pile_centers: Iterable[tuple[float, float]]):
+    """Detect central grillage while rejecting diagonal wing geometry.
+
+    Evidence is intentionally multi-factor:
+    - hatch/closed elongated rectangle is strong evidence;
+    - line-only grillage needs two long parallel members;
+    - line-only members must have piles on both sides;
+    - source layer/block names are never consulted.
     """
     pile_centers = list(pile_centers)
     segments = collect_world_segments(doc)
-    candidates: list[GrillageCandidate] = []
 
-    for hatch_box in collect_hatch_boxes(doc):
-        candidate = _candidate_from_hatch(hatch_box, segments, pile_centers)
-        if candidate:
-            candidates.append(candidate)
+    candidates = []
+    candidates.extend(_hatch_candidates(doc, pile_centers, segments))
+    candidates.extend(_closed_polyline_candidates(doc, pile_centers))
+    candidates.extend(_line_pair_candidates(segments, pile_centers))
 
-    # Closed elongated polyline/line groups without hatch: conservative fallback.
-    # We use a simple connected-component pass on segment endpoints.
-    unused = set(range(len(segments)))
-    while unused:
-        seed = unused.pop()
-        group = {seed}
-        changed = True
-        while changed:
-            changed = False
-            for idx in list(unused):
-                seg = segments[idx]
-                if any(
-                    min(_distance(seg.start, segments[j].start), _distance(seg.start, segments[j].end),
-                        _distance(seg.end, segments[j].start), _distance(seg.end, segments[j].end)) <= 5.0
-                    for j in group
-                ):
-                    group.add(idx)
-                    unused.remove(idx)
-                    changed = True
-        group_segments = [segments[i] for i in group]
-        box = _bbox_of_segments(group_segments)
-        if not box:
-            continue
-        w, h = box[2] - box[0], box[3] - box[1]
-        long_side, short_side = max(w, h), max(1.0, min(w, h))
-        if long_side / short_side < 5.0 or long_side < 3000.0 or len(group_segments) < 4:
-            continue
-        near_piles = sum(1 for p in pile_centers if box[0] - 700 <= p[0] <= box[2] + 700 and box[1] - 700 <= p[1] <= box[3] + 700)
-        if near_piles < 6:
-            continue
-        angle = _dominant_segment_angle(group_segments)
-        candidates.append(GrillageCandidate(group_segments, [], box, angle, 0.86, "closed elongated line group + nearby piles"))
-
-    # Deduplicate overlapping candidates, keeping the strongest evidence.
-    result: list[GrillageCandidate] = []
+    result = []
     for candidate in sorted(candidates, key=lambda c: c.confidence, reverse=True):
-        if candidate.bbox and any(other.bbox and _box_overlap(candidate.bbox, other.bbox, tolerance=100) for other in result):
+        if candidate.bbox and any(_overlap(candidate.bbox, other.bbox) for other in result):
             continue
         result.append(candidate)
     return result
 
 
-def infer_pile_axis(point: tuple[float, float], segments: list[GeometrySegment]) -> tuple[float, float]:
-    """Infer local pile orientation from nearby structural geometry.
-
-    Returns (angle_radians, confidence).  Long nearby members dominate, which
-    makes diagonal wings follow their actual structural axis instead of relying
-    on an arbitrary block rotation.
-    """
+def infer_pile_axis(point, segments):
+    """Fallback axis inference for pile geometry that is not an INSERT block."""
     candidates = []
     for seg in segments:
         d = _point_segment_distance(point, seg)
         if d > 2500.0 or seg.length < 500.0:
             continue
         weight = seg.length / (1.0 + d / 500.0)
-        candidates.append((seg.angle, weight, d, seg.length))
+        candidates.append((seg.angle, weight))
+
     if not candidates:
         return 0.0, 0.0
 
-    c = s = 0.0
-    total = 0.0
-    for angle, weight, _d, _length in candidates:
+    c = s = total = 0.0
+    for angle, weight in candidates:
         c += math.cos(2.0 * angle) * weight
         s += math.sin(2.0 * angle) * weight
         total += weight
+
     angle = 0.5 * math.atan2(s, c)
     resultant = math.hypot(c, s) / total if total else 0.0
     return angle, resultant
