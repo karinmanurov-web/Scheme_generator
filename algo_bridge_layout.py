@@ -1,8 +1,10 @@
 """Bridge-specific adapter for the generic layout engine.
 
 The adapter keeps the existing bridge geometry generator as the source of
-truth, but rebuilds the presentation on a clean sheet.  In particular, legacy
-text from the old table layout must not participate in scale calculation.
+truth, but rebuilds the presentation on a clean sheet. Legacy presentation
+text is removed before measuring the drawing, and the complete bridge view
+plus its dimensions is packed as one coherent drawing group so relative
+alignment is preserved.
 """
 from __future__ import annotations
 
@@ -50,14 +52,7 @@ def _move(items, dx: float, dy: float) -> None:
 
 
 def _delete_old_presentation(msp) -> None:
-    """Remove the old frame/stamp/tables and legacy table text.
-
-    The base bridge algorithm writes its legacy table text on ИСП_Текст.  That
-    text is not a semantic note block: it is part of the old fixed-position
-    presentation and can have a huge bbox.  Keeping it would distort the
-    sheet scale and then the new layout would be optimising around invisible
-    legacy geometry.
-    """
+    """Remove the old fixed-position presentation before layout."""
     for e in list(msp):
         if _layer(e) in FRAME | STAMP | TABLE | LEGACY_PRESENTATION_TEXT:
             try:
@@ -71,21 +66,23 @@ def _group(msp, layers):
 
 
 def _scale_for(box):
-    """Choose a standard denominator using drawing geometry only.
+    """Choose a practical A3 denominator from the drawing, not its tables.
 
-    The available A3 drawing area is approximately 390 x 215 mm after
-    margins.  The denominator is therefore derived from the actual bridge
-    geometry and dimensions, never from table/annotation text.
+    The bridge reference uses a large primary plan.  We therefore prefer the
+    largest standard scale that still fits the *drawing group* into the main
+    drawing zone.  A small safety margin is kept for dimensions and notes.
     """
     if box is None:
         return 100.0
     w = max(float(box.extmax.x - box.extmin.x), 1.0)
     h = max(float(box.extmax.y - box.extmin.y), 1.0)
-    required = max(w / 390.0, h / 215.0, 1.0)
-    return next(
-        (float(s) for s in algo_bridge.STANDARD_SCALES if s >= required),
-        float(algo_bridge.STANDARD_SCALES[-1]),
-    )
+
+    # Main drawing zone: roughly 380 x 205 mm of an A3 landscape sheet.
+    required = max(w / 380.0, h / 205.0, 1.0)
+    candidates = [float(s) for s in algo_bridge.STANDARD_SCALES if s >= required]
+    if not candidates:
+        return float(algo_bridge.STANDARD_SCALES[-1])
+    return candidates[0]
 
 
 def run(
@@ -100,7 +97,7 @@ def run(
     os.close(fd)
     try:
         # Reuse the proven geometry/data extraction from the existing bridge
-        # algorithm.  We replace only its presentation layer afterwards.
+        # algorithm. Presentation is replaced below.
         algo_bridge.run(
             input_dxf,
             tmp,
@@ -119,8 +116,9 @@ def run(
             {"ИСП_Размеры_Проект", "ИСП_Размеры_Факт", "ИСП_Высотные_Отметки"},
         )
 
-        # IMPORTANT: legacy ИСП_Текст is deliberately excluded from the scale
-        # bbox and removed before layout.  The tables are redrawn once below.
+        # Keep construction and dimensions together. They are one coherent
+        # drawing in the source coordinate system; moving them independently
+        # was the reason the previous preview became visually scattered.
         geometry = construction + dims
         box = _bbox(geometry)
         _delete_old_presentation(msp)
@@ -128,71 +126,56 @@ def run(
         scale = _scale_for(box)
         scale_str = f"1:{int(scale)}"
 
-        # Model-space dimensions are paper dimensions multiplied by the chosen
-        # scale denominator.  No arbitrary hard-coded source-drawing bounds
-        # are used here.
-        sheet = Sheet("bridge-01", 420 * scale, 297 * scale, margin=20 * scale)
+        # Model-space sheet dimensions correspond to the chosen paper scale.
+        sheet = Sheet("bridge-01", 420 * scale, 297 * scale, margin=15 * scale)
 
-        stamp = Rect(
-            sheet.width - 185 * scale,
-            sheet.height - 55 * scale,
-            sheet.width,
-            sheet.height,
-        )
-        sheet.reserve("stamp", stamp, role="stamp")
-
-        # Reserve the lower band occupied by the two generated tables.  This
-        # prevents the main drawing or dimensions from being packed over them.
+        # Reserve the lower strip for the generated quantity/area tables and
+        # the lower-right title block. The drawing itself must not enter it.
         table_band = Rect(
             sheet.margin,
             sheet.margin,
-            stamp.left - 10 * scale,
-            sheet.margin + 62 * scale,
+            sheet.width - sheet.margin,
+            sheet.margin + 60 * scale,
         )
         sheet.reserve("table-band", table_band, role="table")
 
-        groups = [
-            ("main", "main_view", construction, 100),
-            ("dimensions", "dimensions", dims, 70),
-        ]
-        for ident, role, group, priority in groups:
-            b = _bbox(group)
-            if b:
-                sheet.add(
-                    LayoutItem(
-                        ident,
-                        role,
-                        float(b.extmax.x - b.extmin.x),
-                        float(b.extmax.y - b.extmin.y),
-                        priority=priority,
-                        # The selected sheet scale is already the physical
-                        # drawing scale.  Do not silently change the geometry
-                        # scale in this first integration step.
-                        min_scale=1.0,
-                        max_scale=1.0,
-                        scale=1.0,
-                    )
+        stamp = Rect(
+            sheet.width - 185 * scale,
+            sheet.margin,
+            sheet.width - sheet.margin,
+            sheet.margin + 55 * scale,
+        )
+        sheet.reserve("stamp", stamp, role="stamp")
+
+        if box:
+            item = LayoutItem(
+                "bridge-drawing",
+                "main_view",
+                float(box.extmax.x - box.extmin.x),
+                float(box.extmax.y - box.extmin.y),
+                priority=100,
+                min_scale=1.0,
+                max_scale=1.0,
+                scale=1.0,
+            )
+            sheet.add(item)
+            result = layout_sheet(sheet, gap=250 * scale, target_fill=0.55)
+
+            if result.unplaced:
+                if log_callback:
+                    log_callback(f"[LAYOUT] Не размещено: {result.unplaced}")
+            elif item.rect:
+                _move(
+                    geometry,
+                    item.rect.left - box.extmin.x,
+                    item.rect.bottom - box.extmin.y,
                 )
 
-        result = layout_sheet(sheet, gap=350 * scale, target_fill=0.60)
-
-        if result.unplaced:
-            if log_callback:
-                log_callback(f"[LAYOUT] Не размещено: {result.unplaced}")
-        else:
-            for ident, group in [("main", construction), ("dimensions", dims)]:
-                item = next((x for x in sheet.items if x.id == ident), None)
-                b = _bbox(group)
-                if item and item.rect and b:
-                    _move(
-                        group,
-                        item.rect.left - b.extmin.x,
-                        item.rect.bottom - b.extmin.y,
-                    )
-
-        # Recompute the actual placed content bbox after layout.  This is what
-        # the frame/stamp should surround, rather than the old pre-layout bbox.
         placed = _bbox(geometry) or box
+        if placed is None:
+            raise RuntimeError("Не удалось определить габарит исполнительной геометрии")
+
+        # Frame/stamp are generated around the actual placed drawing.
         algo_bridge.draw_gost_frame_and_stamp(
             msp,
             placed,
@@ -201,19 +184,11 @@ def run(
             scale_str=scale_str,
         )
 
-        # Tables are generated exactly once, in the reserved lower band.
-        algo_bridge.draw_quantities_table(
-            msp,
-            sheet.margin + 8 * scale,
-            sheet.margin + 58 * scale,
-            scale,
-        )
-        algo_bridge.draw_area_calc_table(
-            msp,
-            sheet.margin + 190 * scale,
-            sheet.margin + 58 * scale,
-            scale,
-        )
+        # Tables are generated exactly once, below the drawing.
+        table_y = placed.extmin.y - 3000 * scale / 100.0
+        table_x = placed.extmin.x
+        algo_bridge.draw_quantities_table(msp, table_x, table_y, scale)
+        algo_bridge.draw_area_calc_table(msp, table_x + 16000 * scale / 100.0, table_y, scale)
 
         doc.saveas(output_dxf)
     finally:
