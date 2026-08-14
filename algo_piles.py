@@ -84,6 +84,23 @@ def transform_pt(pt_local: Tuple[float, float], origin: Tuple[float, float], the
     return (gx, gy)
 
 
+def transform_angle_deg(local_angle_deg: float, scale: Tuple[float, float], rotation_deg: float) -> float:
+    """Transform a local direction through the same affine transform as a nested INSERT.
+
+    Simple ``parent_rotation + insert_rotation`` is incorrect when a parent
+    block is mirrored with a negative x/y scale.  The direction is therefore
+    transformed as a vector through scale + rotation, exactly like the point
+    geometry itself.
+    """
+    angle = math.radians(local_angle_deg)
+    vx = math.cos(angle) * scale[0]
+    vy = math.sin(angle) * scale[1]
+    parent = math.radians(rotation_deg)
+    gx = vx * math.cos(parent) - vy * math.sin(parent)
+    gy = vx * math.sin(parent) + vy * math.cos(parent)
+    return math.degrees(math.atan2(gy, gx))
+
+
 def get_readable_text_angle(angle_deg: float) -> float:
     angle_deg = angle_deg % 360
     if 90 < angle_deg <= 270:
@@ -139,7 +156,6 @@ def draw_fractional_dimension(msp, dim_info: Dict[str, Any], scale: float) -> No
     dev = random.choice([-5, -3, -1, 0, 1, 2, 4])
     fact_val = prj_val + dev
 
-    # Единая фиксированная высота текста по ГОСТ 2.5 * scale
     text_h = 2.5 * scale
     tick_size = 1.0 * scale
     gap = 0.8 * scale
@@ -391,7 +407,6 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         _log(f"[ОШИБКА] Не удалось открыть чертеж: {e}", log_callback)
         return
 
-    # 1. Извлечение исходных размеров из исходного чертежа
     source_dims = extract_source_dimensions(msp_in)
 
     raw_piles = []
@@ -420,7 +435,11 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
                     b_rot_deg = entity.dxf.rotation if entity.dxf.hasattr('rotation') else 0.0
 
                     center_pos = transform_pt_local((bx, by), trans_pos, scale, rotation)
-                    true_rot_deg = rotation + b_rot_deg
+                    effective_scale = (
+                        scale[0] * (entity.dxf.xscale if entity.dxf.hasattr('xscale') else 1.0),
+                        scale[1] * (entity.dxf.yscale if entity.dxf.hasattr('yscale') else 1.0),
+                    )
+                    true_rot_deg = transform_angle_deg(b_rot_deg, effective_scale, rotation)
 
                     raw_piles.append({
                         'center_pt': center_pos,
@@ -437,7 +456,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
 
                     b_ins_pos = transform_pt_local((bx, by), trans_pos, scale, rotation)
                     scan_entities(doc_in.blocks[b_name], b_ins_pos, (scale[0] * b_sx, scale[1] * b_sy), rotation + b_rot, visited)
-                    visited.remove(b_name)  # ИСПРАВЛЕНО: удаляем b_name!
+                    visited.remove(b_name)
 
             elif etype in ('LWPOLYLINE', 'POLYLINE'):
                 pts = [(p[0], p[1]) for p in entity.get_points()] if etype == 'LWPOLYLINE' else [(v.dxf.location.x, v.dxf.location.y) for v in entity.vertices]
@@ -478,11 +497,10 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     for lname, color in {'Сваи_Проект': COLOR_MAIN, 'Оси_Проект': COLOR_MAIN, 'Исполнительная_Номера': COLOR_MAIN, 'Исполнительная_Размеры': COLOR_MAIN, 'Исполнительная_Отклонения': COLOR_FACT, 'Исполнительная_Ростверк': COLOR_BASE, 'Исполнительная_Оси_Опор': COLOR_FACT, 'Исполнительная_Оформление': COLOR_MAIN, 'ИСП_Текст': COLOR_MAIN, 'ИСП_Таблица': COLOR_MAIN}.items():
         if lname not in doc_out.layers:
             doc_out.layers.new(lname, dxfattribs={'color': color})
-            
+
     for ent in list(msp_out):
         if ent.dxftype() in ('DIMENSION', 'TEXT', 'MTEXT', 'LEADER', 'MULTILEADER'):
             msp_out.delete_entity(ent)
-    
 
     hw = SIZES['pile_size'] / 2.0
     final_report = []
@@ -538,29 +556,24 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         t_z = msp_out.add_text(z_txt, dxfattribs={'layer': 'Исполнительная_Отклонения', 'height': SIZES['text_z'], 'color': COLOR_MAIN, 'style': 'ГОСТ_2.304', 'rotation': num_rot})
         t_z.set_placement(transform_pt((hw * 1.3, -hw * 1.5), origin, pile_rot), align=TextEntityAlignment.MIDDLE_CENTER)
 
-    # Вычисление общего bbox геометрии свай
     try:
         bbox = ezdxf_bbox.extents(msp_out)
     except Exception:
         bbox = BoundingBox([Vec3(0, 0, 0), Vec3(1000, 1000, 0)])
 
-    # Динамический выбор глобального масштаба под лист А3 (420 x 297 мм)
     geom_w = max(bbox.extmax.x - bbox.extmin.x, 100.0)
     geom_h = max(bbox.extmax.y - bbox.extmin.y, 100.0)
     req_scale = max(geom_w / 250.0, geom_h / 180.0, 1.0)
     global_scale = next((float(s) for s in STANDARD_SCALES if s >= req_scale), float(STANDARD_SCALES[-1]))
     scale_str = f"1:{int(global_scale)}" if global_scale >= 1.0 else f"{round(global_scale, 2)}"
 
-    # Отрисовка исходных размеров с фиксированной высотой текста 2.5 * global_scale
     for dim_info in source_dims:
         draw_fractional_dimension(msp_out, dim_info, global_scale)
 
-    # Пересчет bbox после отрисовки размеров
     all_bbox = safe_extents(msp_out)
     if not all_bbox.has_data:
         all_bbox = bbox
 
-    # Отрисовка рамки ГОСТ и основного штампа 185х55 мм
     in_x_min, in_y_min, in_x_max, in_y_max = draw_gost_frame_and_stamp(
         msp_out, all_bbox, scale=global_scale, stamp_data=stamp_data, scale_str=scale_str
     )
@@ -569,16 +582,12 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     stamp_x0 = in_x_max - stamp_w
     stamp_y0 = in_y_min
 
-    # Отрисовка таблицы каталога координат вверху справа
     table_x = in_x_max - 112.0 * global_scale
     table_y = in_y_max - 10.0 * global_scale
     if final_report:
         draw_coordinate_table(msp_out, table_x, table_y, final_report, scale=global_scale)
 
-    # Примечания и условные обозначения над штампом (без наслоений)
     draw_notes_and_legend(msp_out, stamp_x0, stamp_y0 + 60.0 * global_scale, scale=global_scale)
-
-
 
     try:
         doc_out.saveas(output_path)
