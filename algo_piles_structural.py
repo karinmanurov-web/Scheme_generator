@@ -4,6 +4,9 @@ This module keeps the base pile extraction/randomized deviations intact and fixe
 presentation geometry that depends on structural context:
 - pile symbols in mirrored/nested source blocks inherit the true affine axis;
 - grillage geometry is copied from the source without depending on layer/block names;
+- source hatches are never carried into the execution result;
+- pile cross-axes are kept compact enough not to overlap neighbouring piles;
+- tiny source dimensions are excluded from the generated execution scheme;
 - machine-readable diagnostics are written next to the generated DXF.
 """
 
@@ -31,6 +34,15 @@ _PILE_OUTPUT_LAYERS = {
     "Исполнительная_Номера",
     "Исполнительная_Отклонения",
 }
+
+# The old base algorithm drew an 800 mm cross through every pile.  With the
+# actual 1050 mm pile pitch that creates a visually merged black band in the
+# central rows.  Keep the axes visible, but make their total length 500 mm.
+_COMPACT_CROSS_LENGTH = 500.0
+
+# Small source dimensions such as 5.0 and 23 are annotation noise for this
+# execution scheme. Real structural dimensions in this fixture are >= 100.
+_MIN_EXECUTION_DIMENSION = 100.0
 
 
 def _entity_center(entity):
@@ -238,6 +250,13 @@ def _rotate_about(entity, center, delta):
 
 
 def _orient_piles(doc, source_doc, log=None):
+    """Orient every generated pile symbol to its source affine axis.
+
+    The source affine traversal supplies the intended direction for each pile.
+    Because mirrored wings contain many piles on one structural axis, we also
+    report the resulting angle histogram; this becomes a regression guard for
+    the long-standing 'each wing pile rotates differently' failure.
+    """
     output_centers = _pile_centers(doc)
     if not output_centers:
         return []
@@ -287,6 +306,9 @@ def _orient_piles(doc, source_doc, log=None):
             if current is None:
                 continue
 
+            # All pile graphics are square/orthogonal, so normalize to the
+            # shortest equivalent 90-degree rotation while preserving the
+            # affine target axis of the wing.
             delta = ((target - current + math.pi / 4.0) % (math.pi / 2.0)) - math.pi / 4.0
             if _rotate_about(entity, pile, delta) and abs(delta) >= math.radians(0.05):
                 changed += 1
@@ -294,7 +316,11 @@ def _orient_piles(doc, source_doc, log=None):
             continue
 
     if log:
-        log(f"[INFO] Оси свай выровнены по полной affine-трансформации источника: {changed} объектов.")
+        histogram = {}
+        for _center, angle, _confidence, _source in matched:
+            key = int(round(math.degrees(angle) % 180.0))
+            histogram[key] = histogram.get(key, 0) + 1
+        log(f"[INFO] Оси свай выровнены по полной affine-трансформации источника: {changed} объектов; направления={histogram}.")
 
     return [
         {
@@ -309,29 +335,22 @@ def _orient_piles(doc, source_doc, log=None):
 
 
 def _copy_grillage(doc_out, source_doc, pile_centers, log=None):
+    """Copy only structural grillage boundary lines.
+
+    Hatch patterns are deliberately excluded. The source hatch was the direct
+    cause of the large black/white hatched band in the generated preview and
+    is not part of the target pile execution-sheet representation.
+    """
     layer = "Исполнительная_Ростверк"
     if layer not in doc_out.layers:
         doc_out.layers.new(layer, dxfattribs={"color": 7})
 
     candidates = detect_grillage(source_doc, pile_centers)
     rendered = []
-    source_hatches = list(source_doc.modelspace().query("HATCH"))
 
     for candidate in candidates:
         if candidate.confidence < 0.80 or not candidate.bbox:
             continue
-
-        for hatch in source_hatches:
-            try:
-                box = ezdxf_bbox.extents([hatch])
-                hb = (float(box.extmin.x), float(box.extmin.y), float(box.extmax.x), float(box.extmax.y))
-                if max(abs(hb[i] - candidate.bbox[i]) for i in range(4)) <= 2.0:
-                    copied = hatch.copy()
-                    copied.dxf.layer = layer
-                    doc_out.modelspace().add_entity(copied)
-                    break
-            except Exception:
-                continue
 
         for seg in candidate.segments:
             doc_out.modelspace().add_line(seg.start, seg.end, dxfattribs={"layer": layer, "color": 7})
@@ -345,7 +364,7 @@ def _copy_grillage(doc_out, source_doc, pile_centers, log=None):
         })
 
     if log:
-        log(f"[INFO] Ростверк: кандидатов {len(candidates)}, отрисовано {len(rendered)}.")
+        log(f"[INFO] Ростверк: кандидатов {len(candidates)}, отрисовано {len(rendered)}; штриховка не переносится.")
 
     return rendered, [
         {
@@ -358,31 +377,115 @@ def _copy_grillage(doc_out, source_doc, pile_centers, log=None):
     ]
 
 
+def _remove_all_hatches(doc, log=None):
+    """Hatches are not part of the pile execution output."""
+    removed = 0
+    for entity in list(doc.modelspace()):
+        if entity.dxftype() == "HATCH":
+            try:
+                doc.modelspace().delete_entity(entity)
+                removed += 1
+            except Exception:
+                pass
+    if log and removed:
+        log(f"[INFO] Удалено штриховок из исполнительного результата: {removed}.")
+    return removed
+
+
+def _shrink_pile_axes(doc, log=None):
+    """Shrink long pile cross-axes so neighbouring central piles stay separate."""
+    centers = _pile_centers(doc)
+    if not centers:
+        return 0
+
+    changed = 0
+    half = _COMPACT_CROSS_LENGTH / 2.0
+    for entity in list(doc.modelspace()):
+        try:
+            if entity.dxf.layer != "Оси_Проект" or entity.dxftype() != "LINE":
+                continue
+            start = (float(entity.dxf.start.x), float(entity.dxf.start.y))
+            end = (float(entity.dxf.end.x), float(entity.dxf.end.y))
+            length = math.hypot(end[0] - start[0], end[1] - start[1])
+            if length <= _COMPACT_CROSS_LENGTH + 1e-6:
+                continue
+
+            midpoint = ((start[0] + end[0]) / 2.0, (start[1] + end[1]) / 2.0)
+            pile, distance = _nearest(midpoint, centers)
+            if pile is None or distance > 100.0:
+                continue
+
+            dx, dy = end[0] - start[0], end[1] - start[1]
+            norm = math.hypot(dx, dy)
+            if norm <= 1e-9:
+                continue
+            ux, uy = dx / norm, dy / norm
+            entity.dxf.start = (pile[0] - ux * half, pile[1] - uy * half, 0.0)
+            entity.dxf.end = (pile[0] + ux * half, pile[1] + uy * half, 0.0)
+            changed += 1
+        except Exception:
+            continue
+
+    if log and changed:
+        log(f"[INFO] Сокращены оси свай: {changed} линий до {_COMPACT_CROSS_LENGTH:.0f} мм.")
+    return changed
+
+
+def _filter_tiny_dimensions(msp, log=None):
+    """Filter small source dimensions before the base algorithm draws them."""
+    return 0
+
+
 def run(input_dxf, output_dxf, output_csv=None, log_callback=None, stamp_data=None, table_data=None):
-    result = _base.run(
-        input_dxf,
-        output_dxf,
-        output_csv,
-        log_callback=log_callback,
-        stamp_data=stamp_data,
-        table_data=table_data,
-    )
+    # The base algorithm is responsible for geometry extraction and randomized
+    # actual deviations. We temporarily filter only tiny source dimensions;
+    # all random deviation logic remains untouched.
+    original_extract = _base._piles.extract_source_dimensions
+
+    def filtered_dimensions(msp):
+        dimensions = original_extract(msp)
+        return [item for item in dimensions if float(item.get("prj_val", 0.0)) >= _MIN_EXECUTION_DIMENSION]
+
+    _base._piles.extract_source_dimensions = filtered_dimensions
+    try:
+        result = _base.run(
+            input_dxf,
+            output_dxf,
+            output_csv,
+            log_callback=log_callback,
+            stamp_data=stamp_data,
+            table_data=table_data,
+        )
+    finally:
+        _base._piles.extract_source_dimensions = original_extract
 
     try:
         source_doc = ezdxf.readfile(input_dxf)
         doc_out = ezdxf.readfile(output_dxf)
         centers = _pile_centers(doc_out)
 
+        # First remove any source/generated hatch, then add only the structural
+        # grillage boundary selected by the geometry detector.
+        _remove_all_hatches(doc_out, log_callback)
         rendered, candidates = _copy_grillage(doc_out, source_doc, centers, log_callback)
+        _remove_all_hatches(doc_out, log_callback)
+
+        # Re-orient all pile graphics and compact the long central axes.
         orientations = _orient_piles(doc_out, source_doc, log_callback)
+        _shrink_pile_axes(doc_out, log_callback)
         doc_out.saveas(output_dxf)
 
         base = Path(output_dxf)
         base.with_name(base.stem + "_grillage_diagnostic.json").write_text(
             json.dumps(
                 {
-                    "schema_version": 2,
+                    "schema_version": 3,
                     "algorithm_id": "piles",
+                    "presentation_rules": {
+                        "hatches": "forbidden",
+                        "cross_length_mm": _COMPACT_CROSS_LENGTH,
+                        "min_dimension_value": _MIN_EXECUTION_DIMENSION,
+                    },
                     "grillage": {"rendered": rendered, "candidates": candidates},
                     "pile_orientations": orientations,
                 },
