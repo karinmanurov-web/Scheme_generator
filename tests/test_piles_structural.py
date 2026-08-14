@@ -5,7 +5,7 @@ from pathlib import Path
 
 import ezdxf
 
-from algo_piles_structural import _source_pile_orientations
+from algo_piles_structural import _remove_all_hatches, _shrink_pile_axes, _source_pile_orientations
 from grillage_detector import detect_grillage
 
 
@@ -32,8 +32,6 @@ def test_current_grillage_is_detected_as_two_structural_members() -> None:
     assert SOURCE.exists(), f"Pile fixture is missing: {SOURCE}"
     doc = ezdxf.readfile(SOURCE)
 
-    # Use the same geometry-driven source pile discovery as the structural
-    # post-processor; the detector itself does not know block names.
     pile_centers = [item["center"] for item in _source_pile_orientations(doc)]
 
     candidates = detect_grillage(doc, pile_centers)
@@ -76,3 +74,56 @@ def test_line_only_rotated_grillage_is_supported() -> None:
     assert len(candidates) == 1
     assert len(candidates[0].segments) == 2
     assert abs((math.degrees(candidates[0].angle) % 180.0) - 30.0) < 0.1
+
+
+def test_pile_cross_axes_are_compacted_without_moving_the_pile_center() -> None:
+    from algo_piles_structural import _COMPACT_CROSS_LENGTH
+
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    center = (1000.0, 2000.0)
+    msp.add_lwpolyline(
+        [
+            (825.0, 1825.0),
+            (1175.0, 1825.0),
+            (1175.0, 2175.0),
+            (825.0, 2175.0),
+        ],
+        close=True,
+        dxfattribs={"layer": "Сваи_Проект"},
+    )
+    msp.add_line((600.0, 2000.0), (1400.0, 2000.0), dxfattribs={"layer": "Оси_Проект"})
+    msp.add_line((1000.0, 1600.0), (1000.0, 2400.0), dxfattribs={"layer": "Оси_Проект"})
+
+    changed = _shrink_pile_axes(doc)
+    assert changed == 2
+
+    lines = [e for e in msp if e.dxf.layer == "Оси_Проект"]
+    assert len(lines) == 2
+    for line in lines:
+        length = math.hypot(
+            line.dxf.end.x - line.dxf.start.x,
+            line.dxf.end.y - line.dxf.start.y,
+        )
+        assert round(length, 6) == _COMPACT_CROSS_LENGTH
+        midpoint = (
+            (line.dxf.start.x + line.dxf.end.x) / 2.0,
+            (line.dxf.start.y + line.dxf.end.y) / 2.0,
+        )
+        assert math.hypot(midpoint[0] - center[0], midpoint[1] - center[1]) < 1e-6
+
+
+def test_hatches_are_removed_from_pile_execution_output() -> None:
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    hatch = msp.add_hatch(color=7)
+    path = hatch.paths.add_polyline_path(
+        [(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0), (0.0, 1000.0)],
+        is_closed=True,
+    )
+    assert path is not None
+    assert len(list(msp.query("HATCH"))) == 1
+
+    removed = _remove_all_hatches(doc)
+    assert removed == 1
+    assert len(list(msp.query("HATCH"))) == 0
