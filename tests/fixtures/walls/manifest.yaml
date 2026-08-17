@@ -9,7 +9,7 @@ reference:
     - {id: sheet_02, page: 2, title: "Монолитные откосные стенки"}
     - {id: sheet_03, page: 3, title: "Откосная стенка Ос-1"}
 algorithm:
-  module: algo_walls_clean
+  module: algo_walls_layout_fixed
   function: run
 checks:
   min_entity_count: 100
