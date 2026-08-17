@@ -14,6 +14,7 @@ from ezdxf import bbox as ezdxf_bbox
 from ezdxf.enums import TextEntityAlignment
 
 from algo_walls import (
+    STANDARD_SCALES,
     analyze_wall_geometry,
     clean_format_text,
     draw_fractional_dimension,
@@ -35,8 +36,6 @@ def _source_is_disposable(entity) -> bool:
         color = int(entity.dxf.color)
     except Exception:
         color = 256
-    # Green ACI is commonly used in the project input for auxiliary pile/fill
-    # graphics.  It is not part of the extracted as-built linework.
     if color == 3:
         return True
     try:
@@ -49,11 +48,7 @@ def _source_is_disposable(entity) -> bool:
 
 
 def _filtered_source_msp(doc):
-    """Return the source modelspace unchanged; filtering is done during extraction.
-
-    This function exists to document the policy boundary.  The clean pipeline
-    never copies source entities to the output document.
-    """
+    """Return the source modelspace unchanged; filtering is done during extraction."""
     return doc.modelspace()
 
 
@@ -95,6 +90,20 @@ def _shift_dim(dim: Dict[str, Any], dx: float, dy: float) -> Dict[str, Any]:
     return result
 
 
+def _fit_scale(width: float, height: float) -> float:
+    """Choose an A3 scale from actual content extents, not annotation size.
+
+    The old implementation used ``geom_size / 120000`` which returned 1:1 for
+    the real slope-wall fixture.  That produced a 420x297-unit frame around a
+    ~50,000-unit drawing.  Here the scale is derived from the A3 usable area
+    and snapped to the project's standard engineering scales.
+    """
+    usable_w = 385.0
+    usable_h = 280.0
+    required = max(width / usable_w, height / usable_h, 1.0)
+    return next((float(s) for s in STANDARD_SCALES if float(s) >= required), float(STANDARD_SCALES[-1]))
+
+
 def run(
     input_dxf: str,
     output_dxf: str,
@@ -106,8 +115,6 @@ def run(
     src = ezdxf.readfile(input_dxf)
     elements, dims, levels = extract_valid_geometry(_filtered_source_msp(src), src)
 
-    # Never copy the source modelspace.  This is the key fix for the stray
-    # green piles, source hatching, old stamps and distant helper geometry.
     out = ezdxf.new("R2018", setup=True)
     out = setup_document(out)
     msp = out.modelspace()
@@ -117,7 +124,9 @@ def run(
         raise RuntimeError("Не удалось извлечь исполнительную геометрию")
 
     min_x, min_y, max_x, max_y = geom
-    pad = max(max_x - min_x, max_y - min_y) * 0.04
+    geom_w = max_x - min_x
+    geom_h = max_y - min_y
+    pad = max(geom_w, geom_h) * 0.04
     dx, dy = -min_x + pad, -min_y + pad
 
     shifted_elements = []
@@ -142,35 +151,49 @@ def run(
     if not base_box.has_data:
         raise RuntimeError("Пустая исполнительная геометрия после очистки")
 
-    # Text size is derived from geometry, while geometry itself stays in source
-    # units.  This avoids the previous giant-sheet/miniature-drawing effect.
-    geom_size = max(base_box.extmax.x - base_box.extmin.x, base_box.extmax.y - base_box.extmin.y)
-    text_scale = max(1.0, geom_size / 120000.0)
+    # First choose a real engineering scale from the construction itself.
+    # The annotation band is deliberately small so it cannot force the model
+    # out of the A3 frame.
+    geom_size = max(geom_w, geom_h)
+    band = max(geom_size * 0.06, 900.0)
+    required_content_h = geom_h + band
+    text_scale = _fit_scale(geom_w, required_content_h)
 
     for dim in shifted_dims:
         draw_fractional_dimension(msp, dim, scale=text_scale)
     for level in shifted_levels:
         draw_level_mark(msp, level, scale=text_scale)
 
-    # Put generated schedules and notes into a dedicated band below the model;
-    # their coordinates are derived from the actual geometry, not fixed source
-    # coordinates.  The frame is generated only after all content exists.
-    band = max(180.0 * text_scale, geom_size * 0.16)
-    table_y = base_box.extmin.y - band * 0.45
+    table_y = base_box.extmin.y - band * 0.35
     table_x = base_box.extmin.x
     L, B, area = analyze_wall_geometry(elements)
-    draw_quantities_table(msp, (table_x, table_y), L=L, B=B, area=area,
-                          scale=text_scale, table_data=table_data)
-    draw_legend_and_notes(msp, (table_x, table_y - band * 0.55), scale=text_scale)
+    draw_quantities_table(
+        msp, (table_x, table_y), L=L, B=B, area=area,
+        scale=text_scale, table_data=table_data,
+    )
+    draw_legend_and_notes(
+        msp, (table_x, table_y - band * 0.45), scale=text_scale,
+    )
 
     all_box = ezdxf_bbox.extents(msp)
-    scale_str = f"1:{max(1, int(round(1.0 / max(text_scale, 1e-6))))}"
-    draw_gost_frame_and_stamp(msp, all_box, scale=text_scale,
-                              stamp_data=stamp_data, scale_str=scale_str)
+    if not all_box.has_data:
+        raise RuntimeError("Не удалось определить габарит исполнительного оформления")
+
+    # The frame is created in the same model-space scale as the geometry and
+    # annotations, so the generated content and its text have a consistent
+    # paper size at the selected engineering scale.
+    scale_str = f"1:{int(text_scale)}"
+    draw_gost_frame_and_stamp(
+        msp, all_box, scale=text_scale,
+        stamp_data=stamp_data, scale_str=scale_str,
+    )
 
     title = ((stamp_data or {}).get("doc_title") or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper()
-    msp.add_text(title, dxfattribs={"style": "ГОСТ_Шрифт", "height": 5.0 * text_scale,
-                                    "layer": "ГОСТ_Текст", "color": 7}).set_placement(
+    msp.add_text(
+        title,
+        dxfattribs={"style": "ГОСТ_Шрифт", "height": 5.0 * text_scale,
+                    "layer": "ГОСТ_Текст", "color": 7},
+    ).set_placement(
         ((all_box.extmin.x + all_box.extmax.x) / 2, all_box.extmax.y - 10 * text_scale),
         align=TextEntityAlignment.CENTER,
     )
