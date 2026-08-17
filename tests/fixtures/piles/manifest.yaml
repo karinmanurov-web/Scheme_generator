@@ -9,7 +9,7 @@ reference:
     - {id: sheet_02, page: 2, title: "Срубка голов свай, устройство опалубки"}
     - {id: sheet_03, page: 3, title: "Срубка голов свай, устройство опалубки"}
 algorithm:
-  module: algo_piles_structural
+  module: algo_piles_structural_fixed
   function: run
 presentation:
   hide_source_layers: true
@@ -39,6 +39,6 @@ checks:
     - ["ИСП_Текст"]
 manual_checks:
   - {id: P-S01, title: "Лист 1: схема свай и их отклонений соответствует эталону", severity: critical}
-  - {id: P-S02, title: "Лист 2: схема свай и исполнительные данные соответствуют эталону", severity: critical}
-  - {id: P-S03, title: "Лист 3: схема свай/ростверка и исполнительные данные соответствуют эталону", severity: critical}
+  - {id: P-S02, title: "Лист 2: схема свай и исполнительные данные соответствует эталону", severity: critical}
+  - {id: P-S03, title: "Лист 3: схема свай/ростверка и исполнительные данные соответствует эталону", severity: critical}
   - {id: P-G01, title: "Координатная/исполнительная ведомость соответствует эталону", severity: critical}
