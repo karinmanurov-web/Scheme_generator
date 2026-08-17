@@ -7,6 +7,7 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Keep regression checks active for every PR synchronization.
 jobs:
   regression:
     runs-on: ubuntu-latest
