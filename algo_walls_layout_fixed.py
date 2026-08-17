@@ -23,10 +23,22 @@ from algo_walls import STANDARD_SCALES
 
 
 def _fit_scale(width: float, height: float) -> float:
-    """Return the smallest standard scale whose A3 area contains the drawing."""
+    """Return a standard scale with headroom for presentation annotations.
+
+    The geometry estimate is made before dimensions, notes and the quantities
+    table are drawn. Those presentation elements have non-zero extents and
+    can otherwise make an apparently fitting A3 frame overflow. A modest
+    headroom factor keeps the rule geometry-driven while making it robust to
+    annotation growth.
+    """
     usable_w = 385.0
     usable_h = 280.0
-    required = max(float(width) / usable_w, float(height) / usable_h, 1.0)
+    headroom = 1.15
+    required = max(
+        float(width) / usable_w,
+        float(height) / usable_h,
+        1.0,
+    ) * headroom
     for candidate in STANDARD_SCALES:
         candidate = float(candidate)
         if candidate >= required:
@@ -41,14 +53,7 @@ def _draw_gost_frame_and_stamp(
     stamp_data: Optional[Dict[str, Any]] = None,
     scale_str: str = "1:100",
 ) -> Tuple[float, float, float, float]:
-    """Draw an A3 frame exactly around the generated content.
-
-    The previous generic frame helper deliberately shifted the frame by 15%
-    in each direction.  That is unsafe for generated drawings because it can
-    move valid geometry outside the sheet.  Placement is now deterministic:
-    the frame is centered on the content bbox and never receives an arbitrary
-    offset.
-    """
+    """Draw an A3 frame exactly around the generated content."""
     setup_gost_layers(msp.doc)
 
     w_frame = 420.0 * scale
@@ -93,7 +98,7 @@ def _draw_gost_frame_and_stamp(
     return in_x_min, in_y_min, in_x_max, in_y_max
 
 
-# Patch only the presentation hooks used by the clean generator.  Geometry
+# Patch only the presentation hooks used by the clean generator. Geometry
 # extraction and dimension preservation remain unchanged.
 _base._fit_scale = _fit_scale
 _base.draw_gost_frame_and_stamp = _draw_gost_frame_and_stamp
