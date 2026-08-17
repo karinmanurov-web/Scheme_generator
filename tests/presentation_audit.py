@@ -1,10 +1,11 @@
 """Universal geometry checks for generated presentation sheets.
 
-The audit is intentionally independent of source DXF layer names.  A generated
+The audit is intentionally independent of source DXF layer names. A generated
 sheet has a frame, while visible drawing content must fit inside it.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 from typing import Any
 
@@ -82,3 +83,31 @@ def audit_presentation(output_path: Path) -> dict[str, Any]:
     result["content_to_frame_width_ratio"] = round((cx1 - cx0) / (fx1 - fx0), 4) if fx1 != fx0 else None
     result["content_to_frame_height_ratio"] = round((cy1 - cy0) / (fy1 - fy0), 4) if fy1 != fy0 else None
     return result
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Audit generated DXF content against its GOST frame")
+    parser.add_argument("paths", nargs="*", type=Path, help="Generated DXF files to audit")
+    args = parser.parse_args()
+
+    paths = args.paths or sorted(Path("reports").glob("*/result.dxf"))
+    if not paths:
+        print("No generated DXF files found")
+        return 1
+
+    failed = False
+    for path in paths:
+        try:
+            result = audit_presentation(path)
+        except Exception as exc:
+            print(f"FAIL {path}: {exc!r}")
+            failed = True
+            continue
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"{status} {path}: violations={result.get('violations', [])} content={result.get('content_bbox')} frame={result.get('frame_bbox')}")
+        failed = failed or not result["passed"]
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
