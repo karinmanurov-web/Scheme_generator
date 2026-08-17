@@ -17,7 +17,6 @@ from pathlib import Path
 
 import ezdxf
 from ezdxf import bbox as ezdxf_bbox
-from ezdxf.math import BoundingBox, Vec3
 
 import algo_piles_structural as _struct
 from algo_piles import draw_notes_and_legend, STANDARD_SCALES
@@ -95,28 +94,6 @@ def _choose_scale(box):
     return next((float(s) for s in STANDARD_SCALES if float(s) >= required), float(STANDARD_SCALES[-1]))
 
 
-def _centered_frame_bbox(box, scale):
-    """Cancel the legacy frame helper's intentional presentation shift.
-
-    ``draw_gost_frame_and_stamp`` shifts the frame +15% right and -15% down.
-    That is useful for some legacy layouts, but it pushes pile dimensions out
-    of the frame. Passing the compensating bbox keeps the geometry centred
-    without changing any source dimension anchor.
-    """
-    fw = 420.0 * scale
-    fh = 297.0 * scale
-    shift_x = fw * 0.15
-    shift_y = fh * 0.15
-    cx = (float(box.extmin.x) + float(box.extmax.x)) / 2.0 - shift_x
-    cy = (float(box.extmin.y) + float(box.extmax.y)) / 2.0 + shift_y
-    return BoundingBox([
-        Vec3(cx - (float(box.extmax.x) - float(box.extmin.x)) / 2.0,
-             cy - (float(box.extmax.y) - float(box.extmin.y)) / 2.0, 0),
-        Vec3(cx + (float(box.extmax.x) - float(box.extmin.x)) / 2.0,
-             cy + (float(box.extmax.y) - float(box.extmin.y)) / 2.0, 0),
-    ])
-
-
 def _rebuild_presentation(doc, stamp_data, log_callback=None):
     msp = doc.modelspace()
     _delete_layers(msp, _PRESENTATION_LAYERS)
@@ -133,15 +110,14 @@ def _rebuild_presentation(doc, stamp_data, log_callback=None):
 
     scale = _choose_scale(box)
     setup_gost_layers(doc)
-    frame_input = _centered_frame_bbox(box, scale)
     draw_gost_frame_and_stamp(
-        msp, frame_input, scale=scale, stamp_data=stamp_data, scale_str=f"1:{int(scale)}"
+        msp, box, scale=scale, stamp_data=stamp_data, scale_str=f"1:{int(scale)}"
     )
 
     frame_box = _bbox_for_layers(msp, {"ГОСТ_Рамка"})
     if frame_box and frame_box.has_data:
-        # Notes belong in the free lower-left presentation zone. The stamp is
-        # lower-right, so notes must never be drawn from the stamp origin.
+        # Keep notes outside the stamp, but do not alter the legacy frame
+        # placement until the three-sheet layout is implemented properly.
         notes_x = frame_box.extmin.x + 10.0 * scale
         notes_y = frame_box.extmin.y + 60.0 * scale
         draw_notes_and_legend(msp, notes_x, notes_y, scale=scale)
@@ -149,8 +125,7 @@ def _rebuild_presentation(doc, stamp_data, log_callback=None):
     if log_callback:
         log_callback(
             f"[LAYOUT] Чистая геометрия: {box.extmax.x-box.extmin.x:.0f}x"
-            f"{box.extmax.y-box.extmin.y:.0f} мм; масштаб 1:{int(scale)}; "
-            "рамка центрирована по исполнительной геометрии."
+            f"{box.extmax.y-box.extmin.y:.0f} мм; масштаб 1:{int(scale)}."
         )
 
 
