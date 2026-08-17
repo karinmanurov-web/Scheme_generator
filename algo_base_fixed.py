@@ -1,11 +1,9 @@
 """Compatibility wrapper for the Подбетонка algorithm.
 
-The original algorithm calculates the final GOST frame from all modelspace
-entities. Large HATCH/annotation entities from a source drawing can therefore
-expand the bounding box by orders of magnitude. This wrapper keeps the existing
-algorithm intact while replacing only its final bounds helper with a geometry-
-aware version and removing extreme, unrelated HATCH outliers from the generated
-DXF. No source layer or block names are required.
+The original algorithm calculates the sheet scale from construction primitives,
+but its final frame bounds are calculated separately.  Keep those two
+calculations on the same geometry-only basis so annotations/HATCH/INSERT
+artifacts cannot make the sheet scale and frame disagree.
 """
 
 import algo_base as _base
@@ -17,14 +15,23 @@ PREVIEW_IMAGE = getattr(_base, "PREVIEW_IMAGE", "preview_base.png")
 
 generate_table_data = _base.generate_table_data
 
+# Keep the original implementation private while the wrapper is active.
+_ORIGINAL_CALCULATE_BOUNDS = _base.calculate_bounds
+_ORIGINAL_SAFE_EXTENTS = _base.safe_extents
+
+
+def geometry_bounds(entities):
+    """Return bounds from drawable construction primitives only."""
+    return _ORIGINAL_CALCULATE_BOUNDS(entities)
+
 
 def safe_extents(msp):
     """Return bounds of drawable construction primitives only."""
     primitives = _base.extract_primitives_wcs(msp)
-    box = _base.calculate_bounds(primitives)
+    box = geometry_bounds(primitives)
     if box.has_data:
         return box
-    return _base.safe_extents(msp)
+    return _ORIGINAL_SAFE_EXTENTS(msp)
 
 
 def _box_area(box) -> float:
@@ -83,12 +90,14 @@ def _sanitize_extreme_hatches(output_dxf: str, source_box) -> int:
 
 def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         stamp_data=None, table_data=None):
-    """Run the original algorithm with geometry-aware frame bounds."""
+    """Run the original algorithm with one consistent geometry-based bbox."""
     src_doc = ezdxf.readfile(input_dxf)
     source_box = safe_extents(src_doc.modelspace())
 
     original_safe_extents = _base.safe_extents
+    original_calculate_bounds = _base.calculate_bounds
     _base.safe_extents = safe_extents
+    _base.calculate_bounds = geometry_bounds
     try:
         result = _base.run(
             input_dxf,
@@ -100,6 +109,7 @@ def run(input_dxf, output_dxf, output_csv=None, log_callback=None,
         )
     finally:
         _base.safe_extents = original_safe_extents
+        _base.calculate_bounds = original_calculate_bounds
 
     removed = _sanitize_extreme_hatches(output_dxf, source_box)
     if removed and log_callback:
