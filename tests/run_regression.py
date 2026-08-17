@@ -26,6 +26,7 @@ except ImportError as exc:  # pragma: no cover - user-facing dependency error
     raise SystemExit("PyYAML is required: pip install -r tests/requirements.txt") from exc
 
 from evaluator import evaluate_manifest, evaluation_to_dict
+from presentation_audit import audit_presentation
 from render import render_dxf_to_png, render_reference_if_available
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,6 +155,25 @@ def evaluate_case(manifest_path: Path, manifest: dict[str, Any], render: bool) -
     result["execution"] = {"passed": ok, "seconds": round(elapsed, 3), "error": error}
 
     evaluation = evaluate_manifest(manifest, output)
+    if output.exists():
+        try:
+            audit = audit_presentation(output)
+            evaluation.diagnostics["presentation_audit"] = audit
+            evaluation.add(
+                "PRESENTATION-CONTAINMENT",
+                "Видимый исполнительный контент находится внутри рамки",
+                "critical",
+                "PASS" if audit.get("passed") else "FAIL",
+                "inside frame" if audit.get("passed") else "violations=" + ",".join(audit.get("violations", [])),
+            )
+        except Exception as exc:
+            evaluation.add(
+                "PRESENTATION-CONTAINMENT",
+                "Видимый исполнительный контент находится внутри рамки",
+                "critical",
+                "FAIL",
+                repr(exc),
+            )
     result["evaluation"] = evaluation_to_dict(evaluation)
 
     if render and output.exists():
