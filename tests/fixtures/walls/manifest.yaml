@@ -1,0 +1,29 @@
+id: walls
+name: "Откосные стенки"
+source: "Откосные стенки/откосн.dxf"
+reference:
+  file: "Откосные стенки/17, 18, 18.1 откосные стенки.pdf"
+  pages: 3
+  sheets:
+    - {id: sheet_01, page: 1, title: "Опалубка откосных стенок, дренаж"}
+    - {id: sheet_02, page: 2, title: "Монолитные откосные стенки"}
+    - {id: sheet_03, page: 3, title: "Откосная стенка Ос-1"}
+algorithm:
+  module: algo_walls_clean
+  function: run
+checks:
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ГОСТ_Рамка"]
+    project_dimensions: ["ГОСТ_Размеры_Проект"]
+    actual_dimensions: ["ГОСТ_Размеры_Факт"]
+  required_output_layer_any:
+    - ["ГОСТ_Штамп_Линии", "ГОСТ_Рамка"]
+    - ["ГОСТ_Штамп_Текст", "ГОСТ_Текст"]
+manual_checks:
+  - {id: W-S01, title: "Лист 1: присутствуют опалубка откосных стенок и дренаж", severity: critical}
+  - {id: W-S02, title: "Лист 2: присутствуют монолитные откосные стенки и исполнительные размеры", severity: critical}
+  - {id: W-S03, title: "Лист 3: присутствует Ос-1 и её исполнительные данные", severity: critical}
+  - {id: W-G01, title: "Таблицы, примечания и общее оформление визуально соответствуют эталону", severity: warning}

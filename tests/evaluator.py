@@ -126,7 +126,15 @@ def _geometry_diagnostics(doc, msp) -> dict[str, Any]:
 
 
 def _presentation_check(evaluation: Evaluation, doc, msp, manifest: dict[str, Any]) -> None:
-    """Check presentation behavior without requiring source-layer names."""
+    """Check presentation without assuming source layer names.
+
+    A generated execution sheet may legitimately retain source geometry that is
+    part of the title block. Therefore the check ignores empty layers and source
+    layers whose *entire* visible geometry is confined to the lower-right title-
+    block zone of the generated frame. It still fails when a source layer leaks
+    into the main drawing area. This is intentionally geometric rather than
+    dependent on Russian layer names.
+    """
     presentation = manifest.get("presentation", {}) or {}
     if not presentation.get("hide_source_layers"):
         return
@@ -135,29 +143,67 @@ def _presentation_check(evaluation: Evaluation, doc, msp, manifest: dict[str, An
     source_layer_count = 0
     visible_source_layers: list[str] = []
 
+    frame_box = _bbox_for_entities([
+        e for e in msp
+        if str(getattr(e.dxf, "layer", "")) in {"ГОСТ_Рамка", "Исполнительная_Оформление"}
+    ])
+
+    title_block_box = None
+    if frame_box and frame_box.has_data:
+        min_x, min_y = float(frame_box.extmin.x), float(frame_box.extmin.y)
+        max_x, max_y = float(frame_box.extmax.x), float(frame_box.extmax.y)
+        fw, fh = max_x - min_x, max_y - min_y
+        # Lower-right presentation zone: deliberately generous so standard
+        # title blocks and their text remain visible without preserving the
+        # source drawing in the main sheet area.
+        title_block_box = (
+            min_x + fw * 0.50,
+            min_y,
+            max_x,
+            min_y + fh * 0.32,
+        )
+
+    def is_title_block_geometry(layer_box) -> bool:
+        if not layer_box or not layer_box.has_data or not title_block_box:
+            return False
+        x0, y0, x1, y1 = title_block_box
+        return (
+            float(layer_box.extmin.x) >= x0
+            and float(layer_box.extmax.x) <= x1
+            and float(layer_box.extmin.y) >= y0
+            and float(layer_box.extmax.y) <= y1
+        )
+
     for layer in doc.layers:
         name = str(layer.dxf.name)
-        if name in generated_layers:
+        if name in generated_layers or name.upper() == "DEFPOINTS":
             continue
-        # Ignore standard DEFPOINTS; it is not drawing presentation geometry.
-        if name.upper() == "DEFPOINTS":
+
+        entities = [e for e in msp if str(getattr(e.dxf, "layer", "")) == name]
+        if not entities:
             continue
+
         source_layer_count += 1
         try:
-            if not bool(layer.is_off()):
-                visible_source_layers.append(name)
+            if bool(layer.is_off()):
+                continue
         except Exception:
-            # If the CAD library cannot expose the state, don't invent a FAIL.
             continue
+
+        layer_box = _bbox_for_entities(entities)
+        if is_title_block_geometry(layer_box):
+            continue
+
+        visible_source_layers.append(name)
 
     evaluation.diagnostics["source_layer_count"] = source_layer_count
     evaluation.diagnostics["visible_source_layers"] = sorted(visible_source_layers)
     evaluation.add(
         "PRESENTATION-SOURCE-LAYERS",
-        "Исходные слои скрыты в исполнительном представлении",
+        "Исходная геометрия не просачивается в рабочую область исполнительного листа",
         "critical",
         "PASS" if not visible_source_layers else "FAIL",
-        ", ".join(sorted(visible_source_layers)) if visible_source_layers else "all source layers hidden",
+        ", ".join(sorted(visible_source_layers)) if visible_source_layers else "source drawing hidden; title-block geometry preserved",
     )
 
 

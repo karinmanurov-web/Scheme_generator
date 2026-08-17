@@ -1,0 +1,26 @@
+id: bridge
+name: "Пролетное строение"
+source: "Пролетное строение/пс.dxf"
+reference:
+  file: "Пролетное строение/26, 26.1 акт.pdf"
+  pages: 2
+  sheets:
+    - {id: sheet_01, page: 1, title: "Устройство монолитной плиты пролетного строения"}
+    - {id: sheet_02, page: 2, title: "Пролетное строение"}
+algorithm:
+  module: algo_bridge_layout
+  function: run
+checks:
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ИСП_Рамка_Основная", "ГОСТ_Рамка"]
+    project_dimensions: ["ИСП_Размеры_Проект"]
+    actual_dimensions: ["ИСП_Размеры_Факт"]
+  required_output_layer_any:
+    - ["ИСП_Таблица", "ИСП_Текст"]
+manual_checks:
+  - {id: BR-S01, title: "Лист 1: монолитная плита и исполнительные размеры соответствуют эталону", severity: critical}
+  - {id: BR-S02, title: "Лист 2: общий вид пролетного строения соответствует эталону", severity: critical}
+  - {id: BR-G01, title: "Таблицы, отметки, примечания и оформление визуально соответствуют эталону", severity: warning}

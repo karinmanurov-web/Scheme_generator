@@ -1,0 +1,42 @@
+name: Regression tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r tests/requirements.txt
+
+      - name: Test generic layout engine and pile structural detection
+        run: python -m pytest -q tests/test_layout_engine.py tests/test_piles_structural.py
+
+      - name: Run headless regression checks and render previews
+        run: python tests/run_regression.py
+
+      - name: Audit generated content stays inside frame
+        if: always()
+        run: python tests/presentation_audit.py
+
+      - name: Upload regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scheme-generator-regression-report
+          path: reports/
+          if-no-files-found: warn

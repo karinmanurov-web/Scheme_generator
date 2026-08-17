@@ -1,0 +1,34 @@
+id: base
+name: "Подбетонка"
+source: "Подбетонка/подбет.dxf"
+reference:
+  file: "Подбетонка/34 подбетонка переход плиты.pdf"
+  pages: 6
+  sheets:
+    - {id: sheet_01, page: 1, title: "Бетонная подготовка под монолитную переходную плиту"}
+    - {id: sheet_02, page: 2, title: "Бетонная подготовка / исполнительные данные"}
+    - {id: sheet_03, page: 3, title: "Заполнение цоколей бетоном В30, переходная плита"}
+    - {id: sheet_04, page: 4, title: "Переходная плита Пл-1, лист 1"}
+    - {id: sheet_05, page: 5, title: "Заполнение цоколей бетоном В30, лист 2"}
+    - {id: sheet_06, page: 6, title: "Переходная плита Пл-1, лист 2"}
+algorithm:
+  module: algo_base_fixed
+  function: run
+checks:
+  min_entity_count: 100
+  min_text_count: 10
+  required_entity_types: [LINE, LWPOLYLINE, TEXT]
+  output_contract:
+    frame: ["ИС_Оформление_Штамп"]
+    project_dimensions: ["ИС_Размеры_Проект_Факт"]
+    actual_dimensions: ["ИС_Размеры_Проект_Факт"]
+  required_output_layer_any:
+    - ["ИС_Высотные_Отметки"]
+    - ["ИС_Текст"]
+manual_checks:
+  - {id: B-S01, title: "Лист 1: бетонная подготовка и исполнительные размеры соответствуют эталону", severity: critical}
+  - {id: B-S02, title: "Лист 2: исполнительные отметки и размеры соответствуют эталону", severity: critical}
+  - {id: B-S03, title: "Лист 3: цоколи и переходная плита соответствуют эталону", severity: critical}
+  - {id: B-S04, title: "Лист 4: переходная плита Пл-1 соответствует эталону", severity: critical}
+  - {id: B-S05, title: "Лист 5: цоколи и переходная плита соответствуют эталону", severity: critical}
+  - {id: B-S06, title: "Лист 6: переходная плита Пл-1 соответствует эталону", severity: critical}
