@@ -23,8 +23,8 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r tests/requirements.txt
 
-      - name: Test generic layout engine and pile structural detection
-        run: python -m pytest -q tests/test_layout_engine.py tests/test_piles_structural.py
+      - name: Test generic layout engine and structural detection
+        run: python -m pytest -q tests/test_layout_engine.py tests/test_piles_structural.py tests/test_presentation_audit.py
 
       - name: Run headless regression checks and render previews
         run: python tests/run_regression.py
