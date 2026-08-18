@@ -1,0 +1,50 @@
+name: Fix empty notes selection
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.repository }}
+      - name: Fix note fallback semantics
+        shell: python
+        run: |
+          from pathlib import Path
+          import py_compile
+          replacements = {
+              'algo_piles.py': [('custom_notes or DEFAULT_NOTES', 'DEFAULT_NOTES if custom_notes is None else custom_notes')],
+              'algo_walls.py': [('custom_notes or [', 'DEFAULT_NOTES_PLACEHOLDER or [')],
+              'algo_base.py': [],
+              'algo_bridge.py': [('custom_notes or [', 'DEFAULT_NOTES_PLACEHOLDER or [')],
+          }
+          for name, reps in replacements.items():
+              p = Path(name)
+              s = p.read_text(encoding='utf-8')
+              if name == 'algo_walls.py':
+                  s = s.replace('    notes = custom_notes or [', '    notes = custom_notes if custom_notes is not None else [')
+              elif name == 'algo_bridge.py':
+                  s = s.replace('    notes = custom_notes or [', '    notes = custom_notes if custom_notes is not None else [')
+              else:
+                  for old, new in reps:
+                      s = s.replace(old, new)
+              p.write_text(s, encoding='utf-8')
+          for name in ('main.py', 'algo_base.py', 'algo_bridge.py', 'algo_piles.py', 'algo_walls.py'):
+              py_compile.compile(name, doraise=True)
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add algo_base.py algo_bridge.py algo_piles.py algo_walls.py
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: preserve empty notes selection"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
