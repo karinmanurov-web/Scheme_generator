@@ -388,13 +388,13 @@ def draw_quantities_table(msp, start_pt: Tuple[float, float], L: float, B: float
     add_text(f"{fact_val:.2f} м3", x0 + sum(cols[:4]) + cols[4] / 2, y0 - row_h * 3.5)
 
 
-def draw_legend_and_notes(msp, start_pt: Tuple[float, float], scale: float = 1.0) -> None:
+def draw_legend_and_notes(msp, start_pt: Tuple[float, float], scale: float = 1.0, custom_notes=None) -> None:
     x0, y0 = start_pt
     th = 2.5 * scale
     step_y = 5.0 * scale
 
     msp.add_text("ПРИМЕЧАНИЯ И УСЛОВНЫЕ ОБОЗНАЧЕНИЯ:", dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th * 1.2, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0), align=TextEntityAlignment.LEFT)
-    notes = [
+    notes = custom_notes or [
         "1. В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
         "2. Линейные размеры в мм, высотные отметки в метрах.",
         "3. Съемка выполнена геодезическим прибором (тахеометром)."
@@ -462,7 +462,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
 
     draw_quantities_table(new_msp, start_pt=(in_x_max - 235.0 * global_scale, in_y_max - 20.0 * global_scale), L=L, B=B, area=area, scale=global_scale, table_data=table_data)
 
-    draw_legend_and_notes(new_msp, start_pt=(stamp_x0, stamp_y0 + 60.0 * global_scale), scale=global_scale)
+    draw_legend_and_notes(new_msp, start_pt=(stamp_x0, stamp_y0 + 60.0 * global_scale), scale=global_scale, custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
 
 
 

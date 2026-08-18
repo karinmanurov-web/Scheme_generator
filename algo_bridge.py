@@ -329,6 +329,19 @@ def draw_quantities_table(msp, x0: float, y0: float, scale: float) -> None:
     a_txt("154.70 м3", x0 + sum(cols[:2]) + cols[2] * 2.5, cy)
 
 
+def draw_notes(msp, x_pos: float, y_pos: float, scale: float = 1.0, custom_notes=None) -> None:
+    notes = custom_notes or [
+        "Линейные размеры указаны в миллиметрах, высотные отметки - в метрах.",
+        "В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
+        "Съемка выполнена электронным тахеометром.",
+        "Система координат и система высот принимаются по проектной документации."
+    ]
+    th = 2.5 * scale; step_y = 4.5 * scale
+    msp.add_text("ПРИМЕЧАНИЯ:", dxfattribs={"style": "ГОСТ_2.304", "height": 3.5 * scale, "layer": "ИСП_Текст", "color": COLOR_MAIN}).set_placement((x_pos, y_pos), align=TextEntityAlignment.BOTTOM_LEFT)
+    for i, note in enumerate(notes):
+        msp.add_text(note, dxfattribs={"style": "ГОСТ_2.304", "height": th, "layer": "ИСП_Текст", "color": COLOR_MAIN}).set_placement((x_pos, y_pos - (i + 1) * step_y), align=TextEntityAlignment.BOTTOM_LEFT)
+
+
 def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: Optional[str] = None, log_callback=None, stamp_data: Optional[Dict[str, Any]] = None, table_data: Optional[List[Dict[str, Any]]] = None) -> None:
     _log(f"[ИНФО] Обработка мостового пролета: {input_path}", log_callback)
 
@@ -404,6 +417,10 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
     table_y = in_y_max - 10.0 * scale
     draw_quantities_table(out_msp, table_x - 147.0 * scale, table_y, scale)
     draw_area_calc_table(out_msp, table_x + 50.0 * scale, table_y - 20.0 * scale, scale)
+
+    stamp_x0 = in_x_max - 185.0 * scale
+    stamp_y0 = in_y_min
+    draw_notes(out_msp, stamp_x0, stamp_y0 + 65.0 * scale, scale, custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
 
 
 

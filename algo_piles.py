@@ -349,7 +349,7 @@ def draw_pile_arrow(msp, origin: Tuple[float, float], val_mm: int, axis: str, th
     t.set_placement(transform_pt(text_pos, origin, theta), align=TextEntityAlignment.MIDDLE_CENTER)
 
 
-def draw_notes_and_legend(msp, x0: float, y0: float, scale: float = 1.0) -> float:
+def draw_notes_and_legend(msp, x0: float, y0: float, scale: float = 1.0, custom_notes=None) -> float:
     layer = 'Исполнительная_Оформление'
     s = scale if scale > 0 else 1.0
     th = 2.5 * s
@@ -357,7 +357,7 @@ def draw_notes_and_legend(msp, x0: float, y0: float, scale: float = 1.0) -> floa
 
     msp.add_text("Примечания:", dxfattribs={'layer': layer, 'height': th * 1.2, 'color': COLOR_MAIN, 'style': 'ГОСТ_2.304'}).set_placement((x0, y0))
     y_cursor = y0 - step_y * 1.2
-    for line in DEFAULT_NOTES:
+    for line in (custom_notes or DEFAULT_NOTES):
         msp.add_text(line, dxfattribs={'layer': layer, 'height': th, 'color': COLOR_MAIN, 'style': 'ГОСТ_2.304'}).set_placement((x0, y_cursor))
         y_cursor -= step_y
 
@@ -576,7 +576,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         draw_coordinate_table(msp_out, table_x, table_y, final_report, scale=global_scale)
 
     # Примечания и условные обозначения над штампом (без наслоений)
-    draw_notes_and_legend(msp_out, stamp_x0, stamp_y0 + 60.0 * global_scale, scale=global_scale)
+    draw_notes_and_legend(msp_out, stamp_x0, stamp_y0 + 60.0 * global_scale, scale=global_scale, custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
 
 
 

@@ -16,6 +16,43 @@ except ImportError:
 
 
 STAMP_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stamp_config.json")
+NOTES_CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "notes_config.json")
+
+DEFAULT_SCHEME_NOTES = {
+    "Свайный фундамент": [
+        "Линейные размеры указаны в миллиметрах, высотные отметки - в метрах.",
+        "Отклонения по высоте и в плане определены геодезическими приборами.",
+        "Допустимые отклонения по СП 46.13330.2012 п. 8.9 табл. 5 - 50 мм.",
+        "Съемка произведена тахеометром {instrument} (серийный №{instrument_serial}).",
+        "Съемка произведена с пунктов ГРО: {survey_points}.",
+        "Фактические координаты центров свай указаны до начала срубки оголовков."
+    ],
+    "Откосные стенки": [
+        "В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
+        "Линейные размеры в мм, высотные отметки в метрах.",
+        "Съемка выполнена геодезическим прибором {instrument}."
+    ],
+    "Подбетонка": [
+        "Линейные размеры указаны в миллиметрах, высоты - в метрах.",
+        "В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
+        "Съемка выполнена электронным тахеометром {instrument}.",
+        "Система координат: {coord_system}. Система высот: {height_system}."
+    ],
+    "Пролетное строение": [
+        "Линейные размеры указаны в миллиметрах, высотные отметки - в метрах.",
+        "В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
+        "Съемка выполнена электронным тахеометром {instrument}.",
+        "Система координат: {coord_system}. Система высот: {height_system}."
+    ],
+}
+NOTE_FIELDS = [
+    ("surveyor", "Геодезист / ФИО", ""),
+    ("instrument", "Прибор / тахеометр", ""),
+    ("instrument_serial", "Серийный номер прибора", ""),
+    ("survey_points", "Пункты ГРО", ""),
+    ("coord_system", "Система координат", ""),
+    ("height_system", "Система высот", ""),
+]
 
 
 class RedirectStdout:
@@ -60,6 +97,11 @@ class AppGUI(tk.Tk):
         self.current_table_rows = []
         self.table_row_widgets = []
 
+        self.notes_config = {}
+        self.note_field_vars = {}
+        self.note_enabled_vars = {}
+        self.note_text_vars = {}
+
         # Переменные полей штампа (ГОСТ 2.104)
         self.stamp_vars = {
             'doc_code': tk.StringVar(),       # Обозначение документа / Шифр
@@ -78,6 +120,7 @@ class AppGUI(tk.Tk):
 
         self.setup_styles()
         self.load_stamp_config()
+        self.load_notes_config()
         self.create_widgets()
         self.load_plugins()
 
@@ -92,7 +135,7 @@ class AppGUI(tk.Tk):
 
         self.style.configure("TNotebook", background=bg_dark, borderwidth=0)
         self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=[20, 8], font=("Segoe UI", 10, "bold"))
-        self.style.map("TNotebook.Tab", background=[("selected", "#3182ce")], foreground=[("selected", "#ffffff")])
+        self.style.map("TNotebook.Tab", background=[("selected", "#3182ce")], foreground=[("selected", "#e2e8f0")])
 
         self.style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"), background=bg_dark, foreground=fg_light)
         self.style.configure("FormLabel.TLabel", font=("Segoe UI", 9, "bold"), background=bg_card, foreground="#cbd5e0")
@@ -114,9 +157,14 @@ class AppGUI(tk.Tk):
         self.tab_extra = ttk.Frame(self.notebook, padding=10)
         self.notebook.add(self.tab_extra, text=" Дополнительно ")
 
+        # 4. Вкладка "Примечания"
+        self.tab_notes = ttk.Frame(self.notebook, padding=10)
+        self.notebook.add(self.tab_notes, text=" Примечания ")
+
         self.build_tab_file()
         self.build_tab_stamp()
         self.build_tab_extra()
+        self.build_tab_notes()
 
     # ==========================================================================
     # ВКЛАДКА "ФАЙЛ"
@@ -254,6 +302,120 @@ class AppGUI(tk.Tk):
         self.stamp_canvas = tk.Canvas(right_frame, bg="#ffffff", highlightthickness=1, highlightbackground="#4a5568")
         self.stamp_canvas.pack(fill=tk.BOTH, expand=True)
         self.stamp_canvas.bind("<Configure>", lambda e: self.draw_gost_stamp_schematic())
+
+    # ========================================================================
+    # ВКЛАДКА "ПРИМЕЧАНИЯ"
+    # ========================================================================
+    def get_current_scheme_name(self):
+        return self.combo_algo.get().strip() if hasattr(self, 'combo_algo') else ''
+
+    def _default_notes_for_scheme(self, scheme):
+        return [{"enabled": True, "text": text} for text in DEFAULT_SCHEME_NOTES.get(scheme, [])]
+
+    def load_notes_config(self):
+        self.notes_config = {}
+        if os.path.exists(NOTES_CONFIG_FILE):
+            try:
+                with open(NOTES_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    self.notes_config = data
+            except Exception as e:
+                print(f"Ошибка чтения настроек примечаний: {e}")
+
+    def save_notes_config(self):
+        try:
+            with open(NOTES_CONFIG_FILE, 'w', encoding='utf-8') as f:
+                json.dump(self.notes_config, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения настроек примечаний: {e}")
+
+    def _ensure_scheme_notes(self, scheme):
+        if scheme not in self.notes_config or not isinstance(self.notes_config.get(scheme), dict):
+            self.notes_config[scheme] = {"notes": self._default_notes_for_scheme(scheme), "fields": {key: default for key, _label, default in NOTE_FIELDS}}
+        else:
+            self.notes_config[scheme].setdefault("notes", self._default_notes_for_scheme(scheme))
+            self.notes_config[scheme].setdefault("fields", {key: default for key, _label, default in NOTE_FIELDS})
+
+    def build_tab_notes(self):
+        self.refresh_notes_tab()
+
+    def refresh_notes_tab(self):
+        for child in self.tab_notes.winfo_children():
+            child.destroy()
+        scheme = self.get_current_scheme_name()
+        if not scheme:
+            ttk.Label(self.tab_notes, text="Выберите схему исполнительной на вкладке «Файл».", font=("Segoe UI", 11), foreground="#cbd5e0", background="#2d3748").pack(expand=True)
+            return
+        self._ensure_scheme_notes(scheme)
+        cfg = self.notes_config[scheme]
+        self.note_enabled_vars, self.note_text_vars, self.note_field_vars = {}, {}, {}
+
+        header = ttk.Frame(self.tab_notes)
+        header.pack(fill=tk.X, pady=(0, 10))
+        ttk.Label(header, text=f"Примечания для схемы: {scheme}", font=("Segoe UI", 12, "bold"), foreground="#f7fafc", background="#2d3748").pack(side=tk.LEFT)
+        buttons = ttk.Frame(header); buttons.pack(side=tk.RIGHT)
+        tk.Button(buttons, text="Сохранить", font=("Segoe UI", 9, "bold"), bg="#3182ce", fg="white", relief=tk.FLAT, command=self.save_current_notes).pack(side=tk.LEFT, padx=(0, 5))
+        tk.Button(buttons, text="Сбросить эталон", font=("Segoe UI", 9, "bold"), bg="#718096", fg="white", relief=tk.FLAT, command=self.reset_current_notes).pack(side=tk.LEFT)
+
+        body = ttk.Frame(self.tab_notes); body.pack(fill=tk.BOTH, expand=True)
+        left = ttk.Frame(body, width=700); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)
+        ttk.Label(left, text="Состав примечаний", font=("Segoe UI", 10, "bold"), foreground="#e2e8f0", background="#2d3748").pack(anchor=tk.W, pady=(0, 6))
+        canvas = tk.Canvas(left, bg="#1a202c", highlightthickness=0)
+        scroll = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
+        inner = ttk.Frame(canvas); inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw"); canvas.configure(yscrollcommand=scroll.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True); scroll.pack(side=tk.RIGHT, fill=tk.Y)
+
+        for idx, item in enumerate(cfg.get("notes", [])):
+            enabled = tk.BooleanVar(value=bool(item.get("enabled", True)))
+            text_var = tk.StringVar(value=str(item.get("text", "")))
+            self.note_enabled_vars[idx], self.note_text_vars[idx] = enabled, text_var
+            row = tk.Frame(inner, bg="#1a202c"); row.pack(fill=tk.X, pady=3, padx=4)
+            tk.Checkbutton(row, variable=enabled, bg="#1a202c", activebackground="#1a202c", selectcolor="#2d3748", relief=tk.FLAT).pack(side=tk.LEFT, padx=(0, 6))
+            ttk.Label(row, text=f"{idx + 1}.", width=4, foreground="#a0aec0", background="#1a202c").pack(side=tk.LEFT)
+            ttk.Entry(row, textvariable=text_var, font=("Segoe UI", 9)).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
+
+        right = ttk.Frame(body, width=320); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)
+        ttk.Label(right, text="Данные для подстановки", font=("Segoe UI", 10, "bold"), foreground="#e2e8f0", background="#2d3748").pack(anchor=tk.W, pady=(0, 6))
+        ttk.Label(right, text="Используйте в тексте {instrument}, {instrument_serial}, {survey_points}, {coord_system} и {height_system}.", wraplength=310, font=("Segoe UI", 8), foreground="#a0aec0", background="#2d3748").pack(anchor=tk.W, pady=(0, 8))
+        for key, label, default in NOTE_FIELDS:
+            var = tk.StringVar(value=str(cfg.get("fields", {}).get(key, default)))
+            self.note_field_vars[key] = var
+            ttk.Label(right, text=label, font=("Segoe UI", 9, "bold"), foreground="#cbd5e0", background="#2d3748").pack(anchor=tk.W, pady=(6, 2))
+            ttk.Entry(right, textvariable=var, font=("Segoe UI", 9)).pack(fill=tk.X, ipady=3)
+
+    def save_current_notes(self):
+        scheme = self.get_current_scheme_name()
+        if not scheme: return
+        self._ensure_scheme_notes(scheme)
+        self.notes_config[scheme] = {
+            "notes": [{"enabled": bool(self.note_enabled_vars[i].get()), "text": self.note_text_vars[i].get()} for i in sorted(self.note_text_vars)],
+            "fields": {key: var.get() for key, var in self.note_field_vars.items()}
+        }
+        self.save_notes_config()
+        self.write_log(f"[ПРИМЕЧАНИЯ] Настройки сохранены для схемы: {scheme}")
+
+    def reset_current_notes(self):
+        scheme = self.get_current_scheme_name()
+        if not scheme: return
+        self.notes_config[scheme] = {"notes": self._default_notes_for_scheme(scheme), "fields": {key: default for key, _label, default in NOTE_FIELDS}}
+        self.save_notes_config(); self.refresh_notes_tab()
+
+    def get_notes_data(self):
+        scheme = self.get_current_scheme_name()
+        if not scheme: return {"notes": [], "fields": {}}
+        self.save_current_notes()
+        cfg = self.notes_config.get(scheme, {})
+        fields = {key: str(value).strip() for key, value in cfg.get("fields", {}).items()}
+        rendered = []
+        for item in cfg.get("notes", []):
+            if not item.get("enabled", True): continue
+            text = str(item.get("text", "")).strip()
+            if not text: continue
+            for key, value in fields.items(): text = text.replace("{" + key + "}", value or "________________")
+            rendered.append(text)
+        return {"scheme": scheme, "notes": rendered, "fields": fields}
 
     # ==========================================================================
     # ВКЛАДКА "ДОПОЛНИТЕЛЬНО"
@@ -467,6 +629,7 @@ class AppGUI(tk.Tk):
                 messagebox.showerror("Ошибка", f"Не удалось сохранить CSV: {e}")
 
     def on_scheme_selected(self, event=None):
+        self.refresh_notes_tab()
         if self.input_file:
             self.refresh_extra_tab()
 
@@ -660,6 +823,7 @@ class AppGUI(tk.Tk):
         if algo_names:
             self.combo_algo['values'] = algo_names
             self.combo_algo.current(0)
+            self.refresh_notes_tab()
         else:
             self.write_log("[ВНИМАНИЕ] Не найдено ни одного плагина (файлы algo_*.py)!")
 
@@ -851,6 +1015,7 @@ class AppGUI(tk.Tk):
         sys.stdout = RedirectStdout(self.write_log)
 
         stamp_data = self.get_stamp_data()
+        stamp_data["_notes_data"] = self.get_notes_data()
         table_data = self.get_table_data()
 
         try:
