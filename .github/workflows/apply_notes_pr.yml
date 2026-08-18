@@ -1,0 +1,31 @@
+name: Apply notes UI patch
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.repository }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Apply patch
+        run: python _patch_notes.py
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.py algo_base.py algo_bridge.py algo_piles.py algo_walls.py
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: add scheme notes configuration UI"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
