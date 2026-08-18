@@ -1,0 +1,57 @@
+name: Patch note editor
+
+on:
+  push:
+    branches:
+      - fix/wider-note-fields
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch note editor
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('main.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''        left = ttk.Frame(body, width=700); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)'''
+          new = '''        left = ttk.Frame(body, width=760); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)'''
+          if old not in text:
+              raise SystemExit('Expected notes left-panel line was not found')
+          text = text.replace(old, new, 1)
+
+          old = '''            ttk.Entry(row, textvariable=text_var, font=("Segoe UI", 9)).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)'''
+          new = '''            editor_frame = tk.Frame(row, bg="#1a202c")
+            editor_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            entry = ttk.Entry(editor_frame, textvariable=text_var, font=("Segoe UI", 9))
+            entry.pack(side=tk.TOP, fill=tk.X, expand=True, ipady=4)
+            hscroll = ttk.Scrollbar(editor_frame, orient="horizontal", command=entry.xview)
+            hscroll.pack(side=tk.BOTTOM, fill=tk.X)
+            entry.configure(xscrollcommand=hscroll.set)'''
+          if old not in text:
+              raise SystemExit('Expected note-entry line was not found')
+          text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+
+      - name: Validate Python syntax
+        run: python -m py_compile main.py
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.py
+          git commit -m "fix: widen editable note fields and add horizontal scroll" || exit 0
+          git push
