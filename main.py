@@ -133,8 +133,8 @@ class AppGUI(tk.Tk):
         self.style.configure("TFrame", background=bg_dark)
         self.style.configure("Card.TFrame", background=bg_card, relief="flat")
 
-        self.style.configure("TNotebook", background=bg_dark, borderwidth=0)
-        self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=[20, 8], font=("Segoe UI", 10, "bold"))
+        self.style.configure("TNotebook", background=bg_dark, borderwidth=0, tabmargins=[0, 0, 0, 0])
+        self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=(20, 8), borderwidth=0, relief="flat", font=("Segoe UI", 10, "bold"))
         self.style.map("TNotebook.Tab", background=[("selected", "#3182ce")], foreground=[("selected", "#e2e8f0")])
 
         self.style.configure("Header.TLabel", font=("Segoe UI", 14, "bold"), background=bg_dark, foreground=fg_light)
@@ -359,13 +359,18 @@ class AppGUI(tk.Tk):
         tk.Button(buttons, text="Сбросить эталон", font=("Segoe UI", 9, "bold"), bg="#718096", fg="white", relief=tk.FLAT, command=self.reset_current_notes).pack(side=tk.LEFT)
 
         body = ttk.Frame(self.tab_notes); body.pack(fill=tk.BOTH, expand=True)
-        left = ttk.Frame(body, width=700); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)
+        left = ttk.Frame(body, width=800); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)
         ttk.Label(left, text="Состав примечаний", font=("Segoe UI", 10, "bold"), foreground="#e2e8f0", background="#2d3748").pack(anchor=tk.W, pady=(0, 6))
         canvas = tk.Canvas(left, bg="#1a202c", highlightthickness=0)
-        scroll = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
-        inner = ttk.Frame(canvas); inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=inner, anchor="nw"); canvas.configure(yscrollcommand=scroll.set)
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True); scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_y = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)
+        scroll_x = ttk.Scrollbar(left, orient="horizontal", command=canvas.xview)
+        inner = ttk.Frame(canvas)
+        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=inner, anchor="nw", width=1050)
+        canvas.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
 
         for idx, item in enumerate(cfg.get("notes", [])):
             enabled = tk.BooleanVar(value=bool(item.get("enabled", True)))
@@ -374,31 +379,19 @@ class AppGUI(tk.Tk):
             row = tk.Frame(inner, bg="#1a202c"); row.pack(fill=tk.X, pady=3, padx=4)
             tk.Checkbutton(row, variable=enabled, bg="#1a202c", activebackground="#1a202c", selectcolor="#2d3748", relief=tk.FLAT).pack(side=tk.LEFT, padx=(0, 6))
             ttk.Label(row, text=f"{idx + 1}.", width=4, foreground="#a0aec0", background="#1a202c").pack(side=tk.LEFT)
-            entry_frame = tk.Frame(row, bg="#1a202c")
-            entry_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            
             note_entry = tk.Entry(
-                entry_frame,
+                row,
                 textvariable=text_var,
                 font=("Segoe UI", 9),
                 bg="#0f172a",
                 fg="#f7fafc",
                 insertbackground="#f7fafc",
                 relief=tk.FLAT,
-                width=90
+                width=110
             )
-            note_entry.pack(side=tk.TOP, fill=tk.X, ipady=5)
-            
-            note_scroll = ttk.Scrollbar(
-                entry_frame,
-                orient="horizontal",
-                command=note_entry.xview
-            )
-            note_scroll.pack(side=tk.BOTTOM, fill=tk.X)
-            
-            note_entry.configure(xscrollcommand=note_scroll.set)
+            note_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=5)
 
-        right = ttk.Frame(body, width=320); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)
+        right = ttk.Frame(body, width=280); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)
         ttk.Label(right, text="Данные для подстановки", font=("Segoe UI", 10, "bold"), foreground="#e2e8f0", background="#2d3748").pack(anchor=tk.W, pady=(0, 6))
         ttk.Label(right, text="Используйте в тексте {instrument}, {instrument_serial}, {survey_points}, {coord_system} и {height_system}.", wraplength=310, font=("Segoe UI", 8), foreground="#a0aec0", background="#2d3748").pack(anchor=tk.W, pady=(0, 8))
         for key, label, default in NOTE_FIELDS:
