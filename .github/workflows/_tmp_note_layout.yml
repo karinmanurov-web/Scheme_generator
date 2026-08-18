@@ -1,0 +1,73 @@
+name: Temporary note layout patch
+
+on:
+  push:
+    branches: [fix/wider-note-fields]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message != 'chore: apply note layout patch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+
+      - name: Apply UI layout patch
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('main.py')
+          s = p.read_text(encoding='utf-8')
+
+          old = 'self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=[20, 8], font=("Segoe UI", 10, "bold"))'
+          new = 'self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=(20, 8), borderwidth=0, relief="flat", font=("Segoe UI", 10, "bold"))'
+          if old not in s:
+              raise SystemExit('Notebook tab style marker not found')
+          s = s.replace(old, new, 1)
+          old = 'self.style.configure("TNotebook", background=bg_dark, borderwidth=0)'
+          new = 'self.style.configure("TNotebook", background=bg_dark, borderwidth=0, tabmargins=[0, 0, 0, 0])'
+          if old not in s:
+              raise SystemExit('Notebook style marker not found')
+          s = s.replace(old, new, 1)
+
+          old = 'left = ttk.Frame(body, width=700); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)'
+          new = 'left = ttk.Frame(body, width=800); left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10)); left.pack_propagate(False)'
+          if old not in s:
+              raise SystemExit('Notes left panel marker not found')
+          s = s.replace(old, new, 1)
+
+          old = 'right = ttk.Frame(body, width=320); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)'
+          new = 'right = ttk.Frame(body, width=280); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)'
+          if old not in s:
+              raise SystemExit('Notes right panel marker not found')
+          s = s.replace(old, new, 1)
+
+          old = '''        canvas = tk.Canvas(left, bg="#1a202c", highlightthickness=0)\n        scroll = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)\n        inner = ttk.Frame(canvas); inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))\n        canvas.create_window((0, 0), window=inner, anchor="nw"); canvas.configure(yscrollcommand=scroll.set)\n        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True); scroll.pack(side=tk.RIGHT, fill=tk.Y)'''
+          new = '''        canvas = tk.Canvas(left, bg="#1a202c", highlightthickness=0)\n        scroll_y = ttk.Scrollbar(left, orient="vertical", command=canvas.yview)\n        scroll_x = ttk.Scrollbar(left, orient="horizontal", command=canvas.xview)\n        inner = ttk.Frame(canvas)\n        inner.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))\n        canvas.create_window((0, 0), window=inner, anchor="nw", width=1050)\n        canvas.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)\n        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)\n        scroll_y.pack(side=tk.RIGHT, fill=tk.Y)\n        scroll_x.pack(side=tk.BOTTOM, fill=tk.X)'''
+          if old not in s:
+              raise SystemExit('Notes canvas marker not found')
+          s = s.replace(old, new, 1)
+
+          old = '''            entry_frame = tk.Frame(row, bg="#1a202c")\n            entry_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)\n            \n            note_entry = tk.Entry(\n                entry_frame,\n                textvariable=text_var,\n                font=("Segoe UI", 9),\n                bg="#0f172a",\n                fg="#f7fafc",\n                insertbackground="#f7fafc",\n                relief=tk.FLAT,\n                width=90\n            )\n            note_entry.pack(side=tk.TOP, fill=tk.X, ipady=5)\n            \n            note_scroll = ttk.Scrollbar(\n                entry_frame,\n                orient="horizontal",\n                command=note_entry.xview\n            )\n            note_scroll.pack(side=tk.BOTTOM, fill=tk.X)\n            \n            note_entry.configure(xscrollcommand=note_scroll.set)'''
+          new = '''            note_entry = tk.Entry(\n                row,\n                textvariable=text_var,\n                font=("Segoe UI", 9),\n                bg="#0f172a",\n                fg="#f7fafc",\n                insertbackground="#f7fafc",\n                relief=tk.FLAT,\n                width=110\n            )\n            note_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=5)'''
+          if old not in s:
+              raise SystemExit('Individual note scrollbar marker not found')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+
+      - name: Validate syntax
+        run: python -m py_compile main.py
+
+      - name: Commit patched file
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.py
+          git diff --cached --check
+          git commit -m "chore: apply note layout patch"
+          git push
