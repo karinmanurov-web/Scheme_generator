@@ -2,7 +2,7 @@ from pathlib import Path
 
 import ezdxf
 
-from algo_cones import detect_cones, generate_table_data, process_dxf_to_asbuilt_scheme
+from algo_cones import detect_cones, generate_table_data, process_dxf_to_asbuilt_scheme, run
 
 
 def _make_fixture(path: Path) -> None:
@@ -15,6 +15,10 @@ def _make_fixture(path: Path) -> None:
         close=True,
     )
     doc.saveas(path)
+
+
+def test_cones_exposes_standard_plugin_entry_point():
+    assert callable(run)
 
 
 def test_detect_cones_is_geometry_based(tmp_path: Path):
