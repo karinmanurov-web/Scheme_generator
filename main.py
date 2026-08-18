@@ -374,7 +374,29 @@ class AppGUI(tk.Tk):
             row = tk.Frame(inner, bg="#1a202c"); row.pack(fill=tk.X, pady=3, padx=4)
             tk.Checkbutton(row, variable=enabled, bg="#1a202c", activebackground="#1a202c", selectcolor="#2d3748", relief=tk.FLAT).pack(side=tk.LEFT, padx=(0, 6))
             ttk.Label(row, text=f"{idx + 1}.", width=4, foreground="#a0aec0", background="#1a202c").pack(side=tk.LEFT)
-            ttk.Entry(row, textvariable=text_var, font=("Segoe UI", 9)).pack(side=tk.LEFT, fill=tk.X, expand=True, ipady=4)
+            entry_frame = tk.Frame(row, bg="#1a202c")
+            entry_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            
+            note_entry = tk.Entry(
+                entry_frame,
+                textvariable=text_var,
+                font=("Segoe UI", 9),
+                bg="#0f172a",
+                fg="#f7fafc",
+                insertbackground="#f7fafc",
+                relief=tk.FLAT,
+                width=90
+            )
+            note_entry.pack(side=tk.TOP, fill=tk.X, ipady=5)
+            
+            note_scroll = ttk.Scrollbar(
+                entry_frame,
+                orient="horizontal",
+                command=note_entry.xview
+            )
+            note_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+            
+            note_entry.configure(xscrollcommand=note_scroll.set)
 
         right = ttk.Frame(body, width=320); right.pack(side=tk.RIGHT, fill=tk.Y); right.pack_propagate(False)
         ttk.Label(right, text="Данные для подстановки", font=("Segoe UI", 10, "bold"), foreground="#e2e8f0", background="#2d3748").pack(anchor=tk.W, pady=(0, 6))
