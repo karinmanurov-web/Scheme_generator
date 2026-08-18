@@ -330,7 +330,7 @@ def draw_quantities_table(msp, x0: float, y0: float, scale: float) -> None:
 
 
 def draw_notes(msp, x_pos: float, y_pos: float, scale: float = 1.0, custom_notes=None) -> None:
-    notes = custom_notes or [
+    notes = custom_notes if custom_notes is not None else [
         "Линейные размеры указаны в миллиметрах, высотные отметки - в метрах.",
         "В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
         "Съемка выполнена электронным тахеометром.",

@@ -357,7 +357,7 @@ def draw_notes_and_legend(msp, x0: float, y0: float, scale: float = 1.0, custom_
 
     msp.add_text("Примечания:", dxfattribs={'layer': layer, 'height': th * 1.2, 'color': COLOR_MAIN, 'style': 'ГОСТ_2.304'}).set_placement((x0, y0))
     y_cursor = y0 - step_y * 1.2
-    for line in (custom_notes or DEFAULT_NOTES):
+    for line in (DEFAULT_NOTES if custom_notes is None else custom_notes):
         msp.add_text(line, dxfattribs={'layer': layer, 'height': th, 'color': COLOR_MAIN, 'style': 'ГОСТ_2.304'}).set_placement((x0, y_cursor))
         y_cursor -= step_y
 

@@ -394,7 +394,7 @@ def draw_legend_and_notes(msp, start_pt: Tuple[float, float], scale: float = 1.0
     step_y = 5.0 * scale
 
     msp.add_text("ПРИМЕЧАНИЯ И УСЛОВНЫЕ ОБОЗНАЧЕНИЯ:", dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th * 1.2, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0), align=TextEntityAlignment.LEFT)
-    notes = custom_notes or [
+    notes = custom_notes if custom_notes is not None else [
         "1. В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
         "2. Линейные размеры в мм, высотные отметки в метрах.",
         "3. Съемка выполнена геодезическим прибором (тахеометром)."
