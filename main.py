@@ -133,7 +133,7 @@ class AppGUI(tk.Tk):
         self.style.configure("TFrame", background=bg_dark)
         self.style.configure("Card.TFrame", background=bg_card, relief="flat")
 
-        self.style.configure("TNotebook", background=bg_dark, borderwidth=0, tabmargins=[0, 0, 0, 0])
+        self.style.configure("TNotebook", background=bg_dark, borderwidth=0)
         self.style.configure("TNotebook.Tab", background="#4a5568", foreground="#e2e8f0", padding=(20, 8), borderwidth=0, relief="flat", font=("Segoe UI", 10, "bold"))
         self.style.map("TNotebook.Tab", background=[("selected", "#3182ce")], foreground=[("selected", "#e2e8f0")])
 
