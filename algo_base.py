@@ -569,7 +569,7 @@ def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: O
         draw_coordinate_table(msp, table_x, table_y, points_catalog, scale=global_scale)
 
     # Примечания и условные обозначения над штампом
-    draw_notes(msp, stamp_x0, stamp_y0 + 65.0 * global_scale + 25.0 * global_scale, global_scale)
+    draw_notes(msp, stamp_x0, stamp_y0 + 65.0 * global_scale + 25.0 * global_scale, global_scale, custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
     draw_legend_block(msp, stamp_x0, stamp_y0 + 65.0 * global_scale, global_scale)
 
 
