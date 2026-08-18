@@ -267,3 +267,22 @@ def generate_table_data(input_path: str) -> List[Dict[str, Any]]:
             "Радиус": round(item["radius"], 3),
         })
     return rows
+
+
+def run(
+    input_dxf: str,
+    output_dxf: str,
+    output_csv: Optional[str] = None,
+    log_callback=None,
+    stamp_data: Optional[Dict[str, Any]] = None,
+    table_data: Optional[List[Dict[str, Any]]] = None,
+) -> None:
+    """Plugin entry point required by main.py."""
+    process_dxf_to_asbuilt_scheme(
+        input_dxf,
+        output_dxf,
+        output_csv,
+        log_callback=log_callback,
+        stamp_data=stamp_data,
+        table_data=table_data,
+    )
