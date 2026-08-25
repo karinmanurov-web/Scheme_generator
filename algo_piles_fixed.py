@@ -18,11 +18,6 @@ from pathlib import Path
 import algo_piles as _piles
 from ezdxf import bbox as ezdxf_bbox
 
-ALGORITHM_NAME = _piles.ALGORITHM_NAME
-PREVIEW_IMAGE = getattr(_piles, "PREVIEW_IMAGE", "preview_piles.png")
-
-# Preserve the existing public API and, importantly, the existing random
-# deviation generation in algo_piles.
 process_dxf_to_asbuilt_scheme = _piles.process_dxf_to_asbuilt_scheme
 
 _GENERATED_LAYERS = {
@@ -67,8 +62,6 @@ def _hide_source_layers(doc, source_layers):
             continue
         try:
             layer = doc.layers.get(layer_name)
-            # ezdxf uses the LayerTableRecord on()/off() methods to change
-            # the DXF layer visibility flag.
             layer.off()
         except Exception:
             continue
