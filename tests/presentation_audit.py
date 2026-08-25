@@ -1,20 +1,20 @@
-"""Headless presentation safety checks for generated sheets.
+"""Universal geometry checks for generated presentation sheets.
 
-The audit is deliberately geometry-based: it does not know source layer names.
-It verifies that visible generated content stays inside the generated outer
-frame. A drawing outside the frame is a hard failure even when structural
-regression checks pass.
+The audit is intentionally independent of source DXF layer names. A generated
+sheet has a frame, while visible drawing content must fit inside it.
 """
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
+from typing import Any
 
 import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 
-ROOT = Path(__file__).resolve().parents[1]
-REPORTS = ROOT / "reports"
-FRAME_LAYERS = {"ГОСТ_Рамка", "ГОСТ_Штамп_Линии", "ГОСТ_Штамп_Текст", "ГОСТ_Таблица_Текст"}
+FRAME_LAYER = "ГОСТ_Рамка"
+EXCLUDED_PREFIXES = ("ГОСТ_Рамка", "ГОСТ_Штамп", "ГОСТ_Таблица_")
+EXCLUDED_EXACT = {"Исполнительная_Оформление"}
 
 
 def _bbox(entities):
@@ -25,69 +25,88 @@ def _bbox(entities):
         return None
 
 
-def _inside(content, frame, tolerance_ratio: float = 0.01) -> bool:
-    fw = frame.extmax.x - frame.extmin.x
-    fh = frame.extmax.y - frame.extmin.y
-    tx = max(10.0, abs(fw) * tolerance_ratio)
-    ty = max(10.0, abs(fh) * tolerance_ratio)
-    return (
-        content.extmin.x >= frame.extmin.x - tx
-        and content.extmax.x <= frame.extmax.x + tx
-        and content.extmin.y >= frame.extmin.y - ty
-        and content.extmax.y <= frame.extmax.y + ty
-    )
+def _as_dict(box) -> dict[str, float] | None:
+    if box is None or not box.has_data:
+        return None
+    return {
+        "min_x": round(float(box.extmin.x), 3),
+        "min_y": round(float(box.extmin.y), 3),
+        "max_x": round(float(box.extmax.x), 3),
+        "max_y": round(float(box.extmax.y), 3),
+        "width": round(float(box.extmax.x - box.extmin.x), 3),
+        "height": round(float(box.extmax.y - box.extmin.y), 3),
+    }
 
 
-def audit_case(path: Path) -> bool:
-    doc = ezdxf.readfile(path)
+def audit_presentation(output_path: Path) -> dict[str, Any]:
+    """Audit whether visible generated content is contained by the frame."""
+    doc = ezdxf.readfile(output_path)
     msp = doc.modelspace()
-    frame = _bbox([e for e in msp if getattr(e.dxf, "layer", "") == "ГОСТ_Рамка"])
-    if frame is None:
-        print(f"FAIL {path.parent.name}: ГОСТ_Рамка missing")
-        return False
 
-    visible = []
+    frame = _bbox([e for e in msp if str(getattr(e.dxf, "layer", "")) == FRAME_LAYER])
+    content_entities = []
     for entity in msp:
-        layer = getattr(entity.dxf, "layer", "")
-        if layer in FRAME_LAYERS:
+        layer = str(getattr(entity.dxf, "layer", ""))
+        if layer in EXCLUDED_EXACT or any(layer.startswith(p) for p in EXCLUDED_PREFIXES):
             continue
-        try:
-            if doc.layers.get(layer).is_off():
-                continue
-        except Exception:
-            pass
-        visible.append(entity)
+        content_entities.append(entity)
+    content = _bbox(content_entities)
 
-    content = _bbox(visible)
-    if content is None:
-        print(f"FAIL {path.parent.name}: no visible content")
-        return False
+    result: dict[str, Any] = {
+        "passed": False,
+        "frame_bbox": _as_dict(frame),
+        "content_bbox": _as_dict(content),
+    }
+    if not frame or not content:
+        result["reason"] = "frame or visible content is missing"
+        return result
 
-    ok = _inside(content, frame)
-    status = "PASS" if ok else "FAIL"
-    print(
-        f"{status} {path.parent.name}: "
-        f"content={content.extmax.x-content.extmin.x:.1f}x{content.extmax.y-content.extmin.y:.1f}; "
-        f"frame={frame.extmax.x-frame.extmin.x:.1f}x{frame.extmax.y-frame.extmin.y:.1f}"
-    )
-    if not ok:
-        print(
-            f"     content bbox=({content.extmin.x:.1f},{content.extmin.y:.1f}).."
-            f"({content.extmax.x:.1f},{content.extmax.y:.1f})"
-        )
-        print(
-            f"     frame   bbox=({frame.extmin.x:.1f},{frame.extmin.y:.1f}).."
-            f"({frame.extmax.x:.1f},{frame.extmax.y:.1f})"
-        )
-    return ok
+    fx0, fy0 = float(frame.extmin.x), float(frame.extmin.y)
+    fx1, fy1 = float(frame.extmax.x), float(frame.extmax.y)
+    cx0, cy0 = float(content.extmin.x), float(content.extmin.y)
+    cx1, cy1 = float(content.extmax.x), float(content.extmax.y)
+    tolerance = max(fx1 - fx0, fy1 - fy0) * 0.01
+
+    violations = []
+    if cx0 < fx0 - tolerance:
+        violations.append("left")
+    if cy0 < fy0 - tolerance:
+        violations.append("bottom")
+    if cx1 > fx1 + tolerance:
+        violations.append("right")
+    if cy1 > fy1 + tolerance:
+        violations.append("top")
+
+    result["passed"] = not violations
+    result["violations"] = violations
+    result["tolerance"] = round(tolerance, 3)
+    result["content_to_frame_width_ratio"] = round((cx1 - cx0) / (fx1 - fx0), 4) if fx1 != fx0 else None
+    result["content_to_frame_height_ratio"] = round((cy1 - cy0) / (fy1 - fy0), 4) if fy1 != fy0 else None
+    return result
 
 
 def main() -> int:
-    paths = sorted(REPORTS.glob("*/result.dxf"))
+    parser = argparse.ArgumentParser(description="Audit generated DXF content against its GOST frame")
+    parser.add_argument("paths", nargs="*", type=Path, help="Generated DXF files to audit")
+    args = parser.parse_args()
+
+    paths = args.paths or sorted(Path("reports").glob("*/result.dxf"))
     if not paths:
-        print("FAIL: no regression result DXFs found")
+        print("No generated DXF files found")
         return 1
-    return 0 if all(audit_case(path) for path in paths) else 1
+
+    failed = False
+    for path in paths:
+        try:
+            result = audit_presentation(path)
+        except Exception as exc:
+            print(f"FAIL {path}: {exc!r}")
+            failed = True
+            continue
+        status = "PASS" if result["passed"] else "FAIL"
+        print(f"{status} {path}: violations={result.get('violations', [])} content={result.get('content_bbox')} frame={result.get('frame_bbox')}")
+        failed = failed or not result["passed"]
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
