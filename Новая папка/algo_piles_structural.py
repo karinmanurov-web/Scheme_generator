@@ -13,7 +13,7 @@ import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 from ezdxf.math import Matrix44
 
-import algo_piles as _base
+import algo_piles_fixed as _base
 from grillage_detector import collect_world_segments, detect_grillage, infer_pile_axis
 
 ALGORITHM_NAME = _base.ALGORITHM_NAME
@@ -25,7 +25,7 @@ _PILE_OUTPUT_LAYERS = {"Сваи_Проект", "Оси_Проект", "Испо
 _COMPACT_CROSS_LENGTH = 500.0
 _MIN_EXECUTION_DIMENSION = 100.0
 _GRILLAGE_LAYER = "Исполнительная_Ростверк"
-_ORIGINAL_EXTRACT_SOURCE_DIMENSIONS = _base.extract_source_dimensions
+_ORIGINAL_EXTRACT_SOURCE_DIMENSIONS = _base._piles.extract_source_dimensions
 
 
 def _entity_center(entity):
@@ -136,7 +136,7 @@ def _source_pile_orientations(doc):
 
 
 def _nearest(point, points):
-    if point is None or not points:
+    if not points:
         return None, float("inf")
     nearest = min(points, key=lambda p: math.hypot(point[0]-p[0], point[1]-p[1]))
     return nearest, math.hypot(point[0]-nearest[0], point[1]-nearest[1])
@@ -278,18 +278,19 @@ def _dimension_filter(msp):
     return [item for item in dimensions if float(item.get("prj_val", 0)) >= _MIN_EXECUTION_DIMENSION]
 
 
+# Compatibility names used by the structural regression tests.
 _source_pile_axes = lambda doc: [(item["center"], item["angle"]) for item in _source_pile_orientations(doc)]
 _remove_hatches = _remove_all_hatches
 _shrink_axes = _shrink_pile_axes
 
 
 def run(input_dxf, output_dxf, output_csv=None, log_callback=None, stamp_data=None, table_data=None):
-    original_extract = _base.extract_source_dimensions
-    _base.extract_source_dimensions = _dimension_filter
+    original_extract = _base._piles.extract_source_dimensions
+    _base._piles.extract_source_dimensions = _dimension_filter
     try:
         result = _base.run(input_dxf, output_dxf, output_csv, log_callback=log_callback, stamp_data=stamp_data, table_data=table_data)
     finally:
-        _base.extract_source_dimensions = original_extract
+        _base._piles.extract_source_dimensions = original_extract
 
     try:
         source = ezdxf.readfile(input_dxf)

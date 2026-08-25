@@ -122,6 +122,14 @@ def run(
         geometry = construction + dims
         box = _bbox(geometry)
         _delete_old_presentation(msp)
+        keep = {id(entity) for entity in geometry}
+        for entity in list(msp):
+            if id(entity) in keep:
+                continue
+            try:
+                msp.delete_entity(entity)
+            except Exception:
+                pass
 
         scale = _scale_for(box)
         scale_str = f"1:{int(scale)}"

@@ -78,7 +78,8 @@ def setup_document(doc: ezdxf.document.Drawing) -> ezdxf.document.Drawing:
         'ГОСТ_Текст': {'color': COLOR_MAIN, 'lineweight': 15},
         'ГОСТ_Размеры_Проект': {'color': COLOR_MAIN, 'lineweight': 15},
         'ГОСТ_Размеры_Факт': {'color': COLOR_FACT, 'lineweight': 15},
-        'ГОСТ_Отметки': {'color': COLOR_MAIN, 'lineweight': 15}
+        'ГОСТ_Отметки': {'color': COLOR_MAIN, 'lineweight': 15},
+        'ГОСТ_Таблица': {'color': COLOR_MAIN, 'lineweight': 15},
     }
 
     for layer_name, attribs in layers_config.items():
@@ -309,7 +310,7 @@ def draw_fractional_dimension(msp, dim_info: Dict[str, Any], scale: float = 1.0)
         text_deg -= 180
 
     mid_x, mid_y = (int1[0] + int2[0]) / 2.0, (int1[1] + int2[1]) / 2.0
-    gap = 0.8 * scale
+    gap = 1.6 * scale
 
     prj_pos = (mid_x + (gap + text_h / 2) * nx, mid_y + (gap + text_h / 2) * ny)
     fct_pos = (mid_x - (gap + text_h / 2) * nx, mid_y - (gap + text_h / 2) * ny)
@@ -383,24 +384,24 @@ def draw_quantities_table(msp, start_pt: Tuple[float, float], L: float, B: float
     dev_factor = random.choice([0.97, 0.98, 0.99, 1.01, 1.02])
     fact_val = round(prj_val * dev_factor, 2)
 
-    cols = [15.0 * scale, 110.0 * scale, 35.0 * scale, 35.0 * scale, 35.0 * scale]
+    cols = [10.0 * scale, 72.0 * scale, 26.0 * scale, 26.0 * scale, 26.0 * scale]
     total_w = sum(cols)
-    row_h = 6.0 * scale
-    th = 2.5 * scale
+    row_h = 5.0 * scale
+    th = 2.0 * scale
 
     y_levels = [y0 - row_h * i for i in range(7)]
 
-    msp.add_lwpolyline([(x0, y0), (x0 + total_w, y0), (x0 + total_w, y0 - row_h * 6), (x0, y0 - row_h * 6)], close=True, dxfattribs={'layer': 'ГОСТ_Контур_Толстый', 'color': COLOR_MAIN})
+    msp.add_lwpolyline([(x0, y0), (x0 + total_w, y0), (x0 + total_w, y0 - row_h * 6), (x0, y0 - row_h * 6)], close=True, dxfattribs={'layer': 'ГОСТ_Таблица', 'color': COLOR_MAIN})
 
-    msp.add_line((x0 + cols[0] + cols[1], y_levels[1]), (x0 + total_w, y_levels[1]), dxfattribs={'layer': 'ГОСТ_Контур_Тонкий', 'color': COLOR_MAIN})
+    msp.add_line((x0 + cols[0] + cols[1], y_levels[1]), (x0 + total_w, y_levels[1]), dxfattribs={'layer': 'ГОСТ_Таблица', 'color': COLOR_MAIN})
     for y in y_levels[2:-1]:
-        msp.add_line((x0, y), (x0 + total_w, y), dxfattribs={'layer': 'ГОСТ_Контур_Тонкий', 'color': COLOR_MAIN})
+        msp.add_line((x0, y), (x0 + total_w, y), dxfattribs={'layer': 'ГОСТ_Таблица', 'color': COLOR_MAIN})
 
     x_cur = x0
     for w in cols[:-1]:
         x_cur += w
         y_start = y0 if x_cur <= (x0 + sum(cols[:2])) else y_levels[1]
-        msp.add_line((x_cur, y_start), (x_cur, y_levels[-1]), dxfattribs={'layer': 'ГОСТ_Контур_Тонкий', 'color': COLOR_MAIN})
+        msp.add_line((x_cur, y_start), (x_cur, y_levels[-1]), dxfattribs={'layer': 'ГОСТ_Таблица', 'color': COLOR_MAIN})
 
     def add_text(txt, tx, ty):
         msp.add_text(txt, dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((tx, ty), align=TextEntityAlignment.MIDDLE_CENTER)
@@ -424,14 +425,14 @@ def draw_legend_and_notes(msp, start_pt: Tuple[float, float], scale: float = 1.0
     th = 2.5 * scale
     step_y = 5.0 * scale
 
-    msp.add_text("ПРИМЕЧАНИЯ И УСЛОВНЫЕ ОБОЗНАЧЕНИЯ:", dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th * 1.2, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0), align=TextEntityAlignment.LEFT)
+    msp.add_text("ПРИМЕЧАНИЯ И УСЛОВНЫЕ ОБОЗНАЧЕНИЯ:", dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th * 1.2, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0), align=TextEntityAlignment.BOTTOM_LEFT)
     notes = custom_notes if custom_notes is not None else [
         "1. В числителе указаны проектные размеры (черным цветом), в знаменателе - фактические (красным).",
         "2. Линейные размеры в мм, высотные отметки в метрах.",
         "3. Съемка выполнена геодезическим прибором (тахеометром)."
     ]
     for i, note in enumerate(notes):
-        msp.add_text(note, dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0 - (i + 1) * step_y), align=TextEntityAlignment.LEFT)
+        msp.add_text(note, dxfattribs={'style': 'ГОСТ_Шрифт', 'height': th, 'layer': 'ГОСТ_Текст', 'color': COLOR_MAIN}).set_placement((x0, y0 - (i + 1) * step_y), align=TextEntityAlignment.BOTTOM_LEFT)
 
 
 def process_dxf_to_asbuilt_scheme(input_path: str, output_path: str, csv_path: Optional[str] = None, log_callback=None, stamp_data: Optional[Dict[str, Any]] = None, table_data: Optional[List[Dict[str, Any]]] = None) -> None:

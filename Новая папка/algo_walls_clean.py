@@ -13,12 +13,10 @@ import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 from ezdxf.enums import TextEntityAlignment
 
+from algo_stamp import STAMP_HEIGHT, draw_gost_frame_and_stamp
 from algo_walls import (
-    STANDARD_SCALES,
     analyze_wall_geometry,
-    clean_format_text,
     draw_fractional_dimension,
-    draw_gost_frame_and_stamp,
     draw_legend_and_notes,
     draw_level_mark,
     draw_quantities_table,
@@ -151,41 +149,35 @@ def run(
     if not base_box.has_data:
         raise RuntimeError("Пустая исполнительная геометрия после очистки")
 
-    # First choose a real engineering scale from the construction itself.
-    # The annotation band is deliberately small so it cannot force the model
-    # out of the A3 frame.
-    geom_size = max(geom_w, geom_h)
-    band = max(geom_size * 0.06, 900.0)
-    required_content_h = geom_h + band
-    text_scale = _fit_scale(geom_w, required_content_h)
+    text_scale = _fit_scale(geom_w, geom_h)
 
     for dim in shifted_dims:
         draw_fractional_dimension(msp, dim, scale=text_scale)
     for level in shifted_levels:
         draw_level_mark(msp, level, scale=text_scale)
 
-    table_y = base_box.extmin.y - band * 0.35
-    table_x = base_box.extmin.x
+    drawing_box = ezdxf_bbox.extents(msp)
+    if not drawing_box.has_data:
+        raise RuntimeError("Не удалось определить габарит исполнительной геометрии")
+
+    scale_str = f"1:{int(text_scale)}"
+    in_x_min, in_y_min, in_x_max, in_y_max = draw_gost_frame_and_stamp(
+        msp, drawing_box, scale=text_scale,
+        stamp_data=stamp_data, scale_str=scale_str,
+    )
+
+    stamp_top = in_y_min + STAMP_HEIGHT * text_scale
+    chrome_left = in_x_min + 2.0 * text_scale
+    notes_top = stamp_top + 26.0 * text_scale
+    table_top = stamp_top - 2.0 * text_scale
     L, B, area = analyze_wall_geometry(elements)
     draw_quantities_table(
-        msp, (table_x, table_y), L=L, B=B, area=area,
+        msp, (chrome_left, table_top), L=L, B=B, area=area,
         scale=text_scale, table_data=table_data,
     )
     draw_legend_and_notes(
-        msp, (table_x, table_y - band * 0.45), scale=text_scale,
-    )
-
-    all_box = ezdxf_bbox.extents(msp)
-    if not all_box.has_data:
-        raise RuntimeError("Не удалось определить габарит исполнительного оформления")
-
-    # The frame is created in the same model-space scale as the geometry and
-    # annotations, so the generated content and its text have a consistent
-    # paper size at the selected engineering scale.
-    scale_str = f"1:{int(text_scale)}"
-    draw_gost_frame_and_stamp(
-        msp, all_box, scale=text_scale,
-        stamp_data=stamp_data, scale_str=scale_str,
+        msp, (chrome_left, notes_top), scale=text_scale,
+        custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"),
     )
 
     title = ((stamp_data or {}).get("doc_title") or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper()
@@ -194,8 +186,8 @@ def run(
         dxfattribs={"style": "ГОСТ_Шрифт", "height": 5.0 * text_scale,
                     "layer": "ГОСТ_Текст", "color": 7},
     ).set_placement(
-        ((all_box.extmin.x + all_box.extmax.x) / 2, all_box.extmax.y - 10 * text_scale),
-        align=TextEntityAlignment.CENTER,
+        ((in_x_min + in_x_max) / 2, in_y_max - 8 * text_scale),
+        align=TextEntityAlignment.MIDDLE_CENTER,
     )
 
     out.saveas(output_dxf)

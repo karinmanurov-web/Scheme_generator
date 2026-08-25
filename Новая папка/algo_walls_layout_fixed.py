@@ -1,15 +1,14 @@
 """Stable presentation adapter for the slope-wall generator.
 
-The geometry extraction remains in ``algo_walls_clean``.  This adapter only
-replaces the two presentation decisions that must be deterministic:
-engineering-scale selection from the actual drawing extents and exact frame
-centering.  No source layer/block names are used here.
+The geometry extraction remains in ``algo_walls_clean``. This adapter places
+the A3 frame so the drawing occupies the upper usable area and the title block
+stays in a reserved bottom-right band. Notes and the quantities table are then
+drawn into the leftover bottom-left band.
 """
 from __future__ import annotations
 
 from typing import Any, Dict, Optional, Tuple
 
-import ezdxf
 from ezdxf.math import BoundingBox
 
 import algo_walls_clean as _base
@@ -21,19 +20,19 @@ from algo_stamp import (
 )
 from algo_walls import STANDARD_SCALES
 
+# Paper-mm reservation for stamp + gap so the drawing cannot sit on the title block.
+_TOP_MARGIN_MM = 12.0
+_LEFT_MARGIN_MM = 20.0
+_RIGHT_MARGIN_MM = 5.0
+_BOTTOM_MARGIN_MM = 5.0
+_STAMP_GAP_MM = 28.0
+
 
 def _fit_scale(width: float, height: float) -> float:
-    """Return a standard scale with headroom for presentation annotations.
-
-    The geometry estimate is made before dimensions, notes and the quantities
-    table are drawn. Those presentation elements have non-zero extents and
-    can otherwise make an apparently fitting A3 frame overflow. A modest
-    headroom factor keeps the rule geometry-driven while making it robust to
-    annotation growth.
-    """
-    usable_w = 385.0
-    usable_h = 280.0
-    headroom = 1.15
+    """Fit construction extents into the A3 area *above* the reserved stamp band."""
+    usable_w = 420.0 - _LEFT_MARGIN_MM - _RIGHT_MARGIN_MM
+    usable_h = 297.0 - _TOP_MARGIN_MM - _BOTTOM_MARGIN_MM - STAMP_HEIGHT - _STAMP_GAP_MM
+    headroom = 1.08
     required = max(
         float(width) / usable_w,
         float(height) / usable_h,
@@ -53,21 +52,29 @@ def _draw_gost_frame_and_stamp(
     stamp_data: Optional[Dict[str, Any]] = None,
     scale_str: str = "1:100",
 ) -> Tuple[float, float, float, float]:
-    """Draw an A3 frame exactly around the generated content."""
+    """Anchor an A3 frame with the drawing in the upper-left usable region."""
     setup_gost_layers(msp.doc)
 
     w_frame = 420.0 * scale
     h_frame = 297.0 * scale
-    if bbox.has_data:
-        cx = (bbox.extmin.x + bbox.extmax.x) / 2.0
-        cy = (bbox.extmin.y + bbox.extmax.y) / 2.0
-    else:
-        cx = cy = 0.0
+    left = _LEFT_MARGIN_MM * scale
+    right = _RIGHT_MARGIN_MM * scale
+    top = _TOP_MARGIN_MM * scale
+    bottom = _BOTTOM_MARGIN_MM * scale
+    stamp_h = STAMP_HEIGHT * scale
+    gap = _STAMP_GAP_MM * scale
 
-    x_min = cx - w_frame / 2.0
-    y_min = cy - h_frame / 2.0
-    x_max = x_min + w_frame
-    y_max = y_min + h_frame
+    if bbox.has_data:
+        x_min = float(bbox.extmin.x) - left
+        y_min = float(bbox.extmin.y) - (stamp_h + gap + bottom)
+        y_max = float(bbox.extmax.y) + top
+        # Keep a true A3 sheet even if annotations grew a little.
+        if y_max - y_min < h_frame:
+            y_max = y_min + h_frame
+        x_max = x_min + w_frame
+    else:
+        x_min, y_min = 0.0, 0.0
+        x_max, y_max = w_frame, h_frame
 
     msp.add_lwpolyline(
         [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)],
@@ -75,10 +82,10 @@ def _draw_gost_frame_and_stamp(
         dxfattribs={"layer": "ГОСТ_Рамка", "color": 7, "lineweight": 50},
     )
 
-    in_x_min = x_min + 20.0 * scale
-    in_y_min = y_min + 5.0 * scale
-    in_x_max = x_max - 5.0 * scale
-    in_y_max = y_max - 5.0 * scale
+    in_x_min = x_min + left
+    in_y_min = y_min + bottom
+    in_x_max = x_max - right
+    in_y_max = y_max - top
     msp.add_lwpolyline(
         [(in_x_min, in_y_min), (in_x_max, in_y_min), (in_x_max, in_y_max), (in_x_min, in_y_max)],
         close=True,
@@ -98,8 +105,6 @@ def _draw_gost_frame_and_stamp(
     return in_x_min, in_y_min, in_x_max, in_y_max
 
 
-# Patch only the presentation hooks used by the clean generator. Geometry
-# extraction and dimension preservation remain unchanged.
 _base._fit_scale = _fit_scale
 _base.draw_gost_frame_and_stamp = _draw_gost_frame_and_stamp
 
