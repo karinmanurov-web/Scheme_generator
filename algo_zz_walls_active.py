@@ -33,7 +33,7 @@ def _geometry_bbox(elements):
 
 
 def _fit_scale(w,h):
-    return fit_standard_scale(w,h,SHEET_W-INNER_LEFT-INNER_RIGHT,SHEET_H-INNER_BOTTOM-INNER_TOP,scales=STANDARD_SCALES,allow_rotation=False)
+    return fit_standard_scale(w,h,SHEET_W-INNER_LEFT-INNER_RIGHT,SHEET_H-INNER_BOTTOM-INNER_TOP,scales=STANDARD_SCALES)
 
 
 def _draw_elements(msp,elements):
@@ -58,20 +58,15 @@ def _scale_dim(d,f,dx,dy):
     d=dict(d)
     for k in ("p1","p2","p_dim"):
         x,y=d[k]; d[k]=((x+dx)*f,(y+dy)*f)
-    # Displayed dimension remains a real-world millimetre value; only its
-    # geometry is scaled to paper space.
     d["angle_rad"]=float(d["angle_rad"])
     return d
 
 
 def _analysis_elements(elements):
-    """Adapt normalized bulge polylines to the legacy wall-analysis API."""
     result=[]
     for x in elements:
-        if x[0]=="POLYLINE":
-            result.append(("POLYLINE",[(p[0],p[1]) for p in x[1]],x[2],x[3]))
-        else:
-            result.append(x)
+        if x[0]=="POLYLINE": result.append(("POLYLINE",[(p[0],p[1]) for p in x[1]],x[2],x[3]))
+        else: result.append(x)
     return result
 
 
@@ -103,7 +98,7 @@ def run(input_dxf:str,output_dxf:str,output_csv:Optional[str]=None,log_callback=
     w,h=max_x-min_x,max_y-min_y
     plan=_fit_scale(w,h)
     f=plan.factor
-    pad=5.0  # paper-space mm
+    pad=5.0
     dx,dy=-min_x,-min_y
     scaled=[_scale_element(x,f,dx,dy) for x in elements]
     out=setup_document(ezdxf.new("R2018",setup=True)); msp=out.modelspace(); _draw_elements(msp,scaled)
@@ -111,7 +106,6 @@ def run(input_dxf:str,output_dxf:str,output_csv:Optional[str]=None,log_callback=
     for d in dims: _draw_dimension(msp,d)
     for x in levels:
         d=dict(x); d["pt"]=((x["pt"][0]+dx)*f,(x["pt"][1]+dy)*f); d["val"]=float(x["val"]); _draw_level(msp,d)
-    # One and only one paper-space translation for all generated source content.
     for ent in msp:
         if ent.dxftype() in {"LINE","LWPOLYLINE","CIRCLE","ARC","TEXT","MTEXT"}:
             try: ent.translate(pad,pad,0)
