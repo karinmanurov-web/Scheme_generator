@@ -11,6 +11,15 @@ PREVIEW_IMAGE = _base.PREVIEW_IMAGE
 generate_table_data = _base.generate_table_data
 process_dxf_to_asbuilt_scheme = _base.process_dxf_to_asbuilt_scheme
 
+_KEEP_LAYERS = {
+    "ИС_Конструкция_Черный",
+    "ИС_Размеры_Проект_Факт",
+    "ИС_Оси",
+    "ИС_Высотные_Отметки",
+    "ИС_Оформление_Штамп",
+    "ИС_Текст",
+}
+
 
 def _box(entity):
     try:
@@ -43,7 +52,7 @@ def _cleanup_outliers(output_dxf: str, log_callback=None) -> int:
     removed = 0
     for entity in list(msp):
         layer = getattr(entity.dxf, "layer", "")
-        if layer == "ИС_Оформление_Штамп":
+        if layer in _KEEP_LAYERS:
             continue
         box = _box(entity)
         if not box:
@@ -58,9 +67,7 @@ def _cleanup_outliers(output_dxf: str, log_callback=None) -> int:
     if removed:
         doc.saveas(output_dxf)
     if log_callback:
-        layers = sorted({str(getattr(e.dxf, "layer", "")) for e in msp})
-        log_callback(f"[CLEANUP] Удалено геометрии вне рамки: {removed} entities.")
-        log_callback(f"[CLEANUP] Остались слои: {layers}")
+        log_callback(f"[CLEANUP] Удалено исходной геометрии вне рамки: {removed} entities.")
     return removed
 
 
