@@ -127,6 +127,17 @@ def extract_valid_geometry(source_msp, source_doc) -> Tuple[List[Any], List[Dict
     extracted_elements, extracted_dims, extracted_levels = [], [], []
 
     excluded_layer_keywords = {'defpoints', 'штамп', 'рамка', 'frame', 'stamp', 'title'}
+    # NOTE (audit TODO): pile_keywords is a layer/block-name allowlist and violates
+    # the project's own "no hardcoded source layer/block names" rule (AGENTS.md).
+    # It works for these four fixtures but will silently fail to exclude piles on
+    # any source DXF that names/labels its pile layer or block differently.
+    # Replacing it with a geometry/semantic pile detector (similar in spirit to
+    # grillage_detector.py) is a real refactor and is intentionally NOT done here
+    # to avoid an unreviewed rewrite; tracked separately. is_disposable_geometry()
+    # below is the safe, geometry/color-driven net that catches what the keyword
+    # list misses (this was the direct cause of stray green pile geometry and
+    # source hatching leaking into the "Откосные стенки" output: a color/entity
+    # rejection helper existed in algo_walls_clean.py but was never called).
     pile_keywords = {'свая', 'сваи', 'pile', 'ось_свай', 'wipeout'}
 
     def is_excluded_layer(lname):
@@ -140,8 +151,28 @@ def extract_valid_geometry(source_msp, source_doc) -> Tuple[List[Any], List[Dict
             return True
         return False
 
+    def is_disposable_geometry(entity) -> bool:
+        """Reject presentation/fill geometry using color and entity type only
+        (no layer/block name dependency). Catches source hatching, wipeouts and
+        ACI-green (color 3) helper geometry such as stray pile markers that
+        `is_pile()`'s name-based check does not recognize."""
+        if entity.dxftype() in {'HATCH', 'WIPEOUT', 'IMAGE', 'IMAGEDEF', 'SOLID', '3DFACE'}:
+            return True
+        try:
+            if int(entity.dxf.color) == 3:  # ACI 3 = green
+                return True
+        except Exception:
+            pass
+        try:
+            rgb = getattr(entity, 'rgb', None)
+            if rgb and rgb[1] > rgb[0] * 1.25 and rgb[1] > rgb[2] * 1.25:
+                return True
+        except Exception:
+            pass
+        return False
+
     def process_entity(entity, offset=(0.0, 0.0), scale=(1.0, 1.0), rotation=0.0):
-        if is_pile(entity):
+        if is_pile(entity) or is_disposable_geometry(entity):
             return
         layer_name = entity.dxf.layer.lower() if hasattr(entity.dxf, 'layer') else ''
 
