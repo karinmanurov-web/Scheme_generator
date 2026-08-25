@@ -6,8 +6,6 @@ from ezdxf import bbox as ezdxf_bbox
 
 import algo_base_fixed as _base
 
-ALGORITHM_NAME = _base.ALGORITHM_NAME
-PREVIEW_IMAGE = _base.PREVIEW_IMAGE
 generate_table_data = _base.generate_table_data
 process_dxf_to_asbuilt_scheme = _base.process_dxf_to_asbuilt_scheme
 
