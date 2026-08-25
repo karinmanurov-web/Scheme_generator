@@ -29,8 +29,10 @@ def test_detect_cones_is_geometry_based(tmp_path: Path):
     cones = detect_cones(doc.modelspace())
 
     assert len(cones) == 3
-    assert cones[0]["center"] == (1000.0, 1000.0)
-    assert cones[1]["center"] == (2500.0, 1200.0)
+    centers = {item["center"] for item in cones}
+    assert (1000.0, 1000.0) in centers
+    assert (2500.0, 1200.0) in centers
+    assert (4150.0, 1150.0) in centers
 
 
 def test_cone_algorithm_generates_nonempty_dxf_and_table(tmp_path: Path):
