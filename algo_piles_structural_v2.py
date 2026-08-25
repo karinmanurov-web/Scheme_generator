@@ -11,7 +11,7 @@ import algo_piles_structural as _base
 from pile_axis_refinement import infer_pile_axis as _refined_infer_pile_axis
 
 # _orient_piles in the base module resolves infer_pile_axis from its own module
-globals, so replace that dependency without duplicating the whole pipeline.
+# globals, so replace that dependency without duplicating the whole pipeline.
 _base.infer_pile_axis = _refined_infer_pile_axis
 
 ALGORITHM_NAME = _base.ALGORITHM_NAME
