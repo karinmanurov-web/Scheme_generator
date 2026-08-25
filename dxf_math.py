@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
 import ezdxf
-from ezdxf.math import BoundingBox, Matrix44
+from ezdxf.math import Matrix44
 
 A3_W_MM = 420.0
 A3_H_MM = 297.0
@@ -49,31 +49,43 @@ def unit_to_mm_from_doc(doc) -> float:
     return UNIT_TO_MM.get(units, 1.0)
 
 
-def normalize_to_mm(doc) -> float:
-    """Normalize modelspace coordinates to millimetres exactly once.
+def _transform_layout_entities(layout, transform: Matrix44) -> None:
+    for entity in list(layout):
+        try:
+            entity.transform(transform)
+        except Exception:
+            continue
 
-    The function is deliberately idempotent: after conversion the DXF unit
-    header is set to millimetres, so repeated calls do not rescale geometry.
-    Entities that cannot be transformed are left untouched rather than making
-    the whole conversion fail.
+
+def normalize_to_mm(doc) -> float:
+    """Normalize all DXF geometry to millimetres exactly once.
+
+    Modelspace, paperspace and block definitions are transformed together.
+    This is important because scaling only INSERT coordinates would leave the
+    geometry stored inside block definitions in the old unit system.
     """
     factor = unit_to_mm_from_doc(doc)
     if abs(factor - 1.0) < 1e-12:
         try:
             doc.header["$INSUNITS"] = 4
+            doc.header["$MEASUREMENT"] = 1
         except Exception:
             pass
         return 1.0
 
     transform = Matrix44.scale(factor, factor, 1.0)
     for layout in doc.layouts:
-        for entity in list(layout):
-            try:
-                entity.transform(transform)
-            except Exception:
-                # Some annotation/proxy entities cannot be transformed by
-                # ezdxf. Their raw coordinates are retained for compatibility.
+        _transform_layout_entities(layout, transform)
+    try:
+        for block in doc.blocks:
+            # BlockTable contains definitions and may expose special *Model_Space
+            # / *Paper_Space records already represented by layouts. Transforming
+            # them twice would be wrong, so skip those layout-backed definitions.
+            if block.name.lower() in {"*model_space", "*paper_space"}:
                 continue
+            _transform_layout_entities(block, transform)
+    except Exception:
+        pass
     try:
         doc.header["$INSUNITS"] = 4
         doc.header["$MEASUREMENT"] = 1
@@ -108,7 +120,6 @@ def fit_standard_scale(width_mm: float, height_mm: float, usable_width_mm: float
 
 
 def choose_standard_scale(width_mm: float, height_mm: float, usable_width_mm: float = None, usable_height_mm: float = None) -> float:
-    """Compatibility API returning only the denominator N for 1:N."""
     if usable_width_mm is None or usable_height_mm is None:
         usable_width_mm, usable_height_mm = a3_work_area()
     return fit_standard_scale(width_mm, height_mm, usable_width_mm, usable_height_mm).denominator
