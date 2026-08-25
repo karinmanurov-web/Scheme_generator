@@ -33,13 +33,7 @@ def _geometry_bbox(elements):
 
 
 def _fit_scale(w,h):
-    return fit_standard_scale(
-        w, h,
-        SHEET_W-INNER_LEFT-INNER_RIGHT,
-        SHEET_H-INNER_BOTTOM-INNER_TOP,
-        scales=STANDARD_SCALES,
-        allow_rotation=False,
-    )
+    return fit_standard_scale(w,h,SHEET_W-INNER_LEFT-INNER_RIGHT,SHEET_H-INNER_BOTTOM-INNER_TOP,scales=STANDARD_SCALES,allow_rotation=False)
 
 
 def _draw_elements(msp,elements):
@@ -64,9 +58,21 @@ def _scale_dim(d,f,dx,dy):
     d=dict(d)
     for k in ("p1","p2","p_dim"):
         x,y=d[k]; d[k]=((x+dx)*f,(y+dy)*f)
+    # Displayed dimension remains a real-world millimetre value; only its
+    # geometry is scaled to paper space.
     d["angle_rad"]=float(d["angle_rad"])
-    d["prj_val"]=float(d["prj_val"])*f
     return d
+
+
+def _analysis_elements(elements):
+    """Adapt normalized bulge polylines to the legacy wall-analysis API."""
+    result=[]
+    for x in elements:
+        if x[0]=="POLYLINE":
+            result.append(("POLYLINE",[(p[0],p[1]) for p in x[1]],x[2],x[3]))
+        else:
+            result.append(x)
+    return result
 
 
 def _draw_level(msp,d):
@@ -97,20 +103,20 @@ def run(input_dxf:str,output_dxf:str,output_csv:Optional[str]=None,log_callback=
     w,h=max_x-min_x,max_y-min_y
     plan=_fit_scale(w,h)
     f=plan.factor
-    pad=5.0  # physical paper-space padding in millimetres
+    pad=5.0  # paper-space mm
     dx,dy=-min_x,-min_y
     scaled=[_scale_element(x,f,dx,dy) for x in elements]
     out=setup_document(ezdxf.new("R2018",setup=True)); msp=out.modelspace(); _draw_elements(msp,scaled)
     dims=[_scale_dim(x,f,dx,dy) for x in dims]
     for d in dims: _draw_dimension(msp,d)
     for x in levels:
-        d=dict(x); d["pt"]=((x["pt"][0]+dx)*f+pad,(x["pt"][1]+dy)*f+pad); d["val"]=float(x["val"]); _draw_level(msp,d)
-    # Shift all geometry into the same paper-space padding after scaling.
+        d=dict(x); d["pt"]=((x["pt"][0]+dx)*f,(x["pt"][1]+dy)*f); d["val"]=float(x["val"]); _draw_level(msp,d)
+    # One and only one paper-space translation for all generated source content.
     for ent in msp:
         if ent.dxftype() in {"LINE","LWPOLYLINE","CIRCLE","ARC","TEXT","MTEXT"}:
             try: ent.translate(pad,pad,0)
             except Exception: pass
     box=ezdxf_bbox.extents(msp); scale_str=f"1:{int(plan.denominator)}"; ix0,iy0,ix1,iy1=draw_gost_frame_and_stamp(msp,box,scale=1.0,stamp_data=stamp_data,scale_str=scale_str)
     stamp_top=iy0+STAMP_HEIGHT; stamp_left=ix1-STAMP_WIDTH; chrome_left=ix0+2.0; available=max(0.0,stamp_left-chrome_left-3.0); table_scale=max(.75,min(1.0,available/230.0))
-    L,B,area=analyze_wall_geometry(elements); draw_quantities_table(msp,(chrome_left,stamp_top-2),L=L,B=B,area=area,scale=table_scale,table_data=table_data); draw_legend_and_notes(msp,(chrome_left,iy1-12),scale=1.0,custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
+    L,B,area=analyze_wall_geometry(_analysis_elements(elements)); draw_quantities_table(msp,(chrome_left,stamp_top-2),L=L,B=B,area=area,scale=table_scale,table_data=table_data); draw_legend_and_notes(msp,(chrome_left,iy1-12),scale=1.0,custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
     title=((stamp_data or {}).get("doc_title") or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper(); msp.add_text(title,dxfattribs={"style":"ГОСТ_Шрифт","height":5.0,"layer":"ГОСТ_Текст","color":7}).set_placement(((ix0+ix1)/2,iy1-8),align=TextEntityAlignment.MIDDLE_CENTER); out.saveas(output_dxf)
