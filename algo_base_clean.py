@@ -1,10 +1,4 @@
-"""Geometry-only cleanup wrapper for the Подбетонка algorithm.
-
-Keeps the stable geometry/bounds implementation from ``algo_base_fixed`` and
-removes only source entities that are clearly outside the generated frame.
-No source layer names are required: the decision is made from entity extents
-and the generated frame extent.
-"""
+"""Geometry-only cleanup wrapper for the Подбетонка algorithm."""
 from __future__ import annotations
 
 import ezdxf
@@ -54,9 +48,6 @@ def _cleanup_outliers(output_dxf: str, log_callback=None) -> int:
         box = _box(entity)
         if not box:
             continue
-        # Remove only geometry that is completely outside the generated sheet.
-        # A small margin keeps dimension/text entities sitting just outside the
-        # construction bbox but still belonging to the sheet.
         if not _overlaps(box, frame_box, margin=500.0):
             try:
                 msp.delete_entity(entity)
@@ -67,7 +58,9 @@ def _cleanup_outliers(output_dxf: str, log_callback=None) -> int:
     if removed:
         doc.saveas(output_dxf)
     if log_callback:
+        layers = sorted({str(getattr(e.dxf, "layer", "")) for e in msp})
         log_callback(f"[CLEANUP] Удалено геометрии вне рамки: {removed} entities.")
+        log_callback(f"[CLEANUP] Остались слои: {layers}")
     return removed
 
 
