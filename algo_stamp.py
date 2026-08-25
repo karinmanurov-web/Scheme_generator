@@ -25,7 +25,6 @@ def setup_gost_layers(doc: ezdxf.document.Drawing) -> None:
         doc.layers.new('ГОСТ_Штамп_Текст', dxfattribs={'color': 7, 'lineweight': 15})
     if 'ГОСТ_Таблица_Текст' not in doc.layers:
         doc.layers.new('ГОСТ_Таблица_Текст', dxfattribs={'color': 7, 'lineweight': 15})
-
     if 'ГОСТ_2.304' not in doc.styles:
         doc.styles.new('ГОСТ_2.304', dxfattribs={'font': 'isocpeur.ttf', 'width': 1.0, 'oblique': 15.0})
 
@@ -33,150 +32,78 @@ def setup_gost_layers(doc: ezdxf.document.Drawing) -> None:
 def draw_gost_stamp(msp, x0: float, y0: float, scale: float = 1.0, stamp_data: Optional[Dict[str, Any]] = None, scale_str: str = "1:100") -> None:
     doc = msp.doc
     setup_gost_layers(doc)
-
     sw = STAMP_WIDTH * scale
     sh = STAMP_HEIGHT * scale
-
     x1 = x0 + sw
     y1 = y0 + sh
 
-    msp.add_lwpolyline(
-        [(x0, y0), (x1, y0), (x1, y1), (x0, y1)],
-        close=True,
-        dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
-    )
-
+    msp.add_lwpolyline([(x0, y0), (x1, y0), (x1, y1), (x0, y1)], close=True,
+                       dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50})
     msp.add_line((x0 + 65.0 * scale, y0), (x0 + 65.0 * scale, y1), dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50})
-
     for ry in range(5, 55, 5):
         msp.add_line((x0, y0 + ry * scale), (x0 + 65.0 * scale, y0 + ry * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-
     for cx in [10.0, 20.0, 30.0, 40.0, 55.0]:
         msp.add_line((x0 + cx * scale, y0 + 30.0 * scale), (x0 + cx * scale, y1), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
         msp.add_line((x0 + cx * scale, y0), (x0 + cx * scale, y0 + 10.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-
     msp.add_line((x0 + 20.0 * scale, y0 + 10.0 * scale), (x0 + 20.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 40.0 * scale, y0 + 10.0 * scale), (x0 + 40.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 55.0 * scale, y0 + 10.0 * scale), (x0 + 55.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-
     msp.add_line((x0 + 65.0 * scale, y0 + 45.0 * scale), (x1, y0 + 45.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 65.0 * scale, y0 + 30.0 * scale), (x1, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 65.0 * scale, y0 + 15.0 * scale), (x1, y0 + 15.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-
     msp.add_line((x0 + 135.0 * scale, y0), (x0 + 135.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
-
     msp.add_line((x0 + 135.0 * scale, y0 + 25.0 * scale), (x1, y0 + 25.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 150.0 * scale, y0 + 15.0 * scale), (x0 + 150.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
     msp.add_line((x0 + 165.0 * scale, y0 + 15.0 * scale), (x0 + 165.0 * scale, y0 + 30.0 * scale), dxfattribs={'layer': 'ГОСТ_Штамп_Линии', 'color': 7, 'lineweight': 25})
 
     def add_sm_txt(txt, cx_mm, cy_mm, align=TextEntityAlignment.MIDDLE_CENTER):
-        msp.add_text(
-            txt,
-            dxfattribs={
-                'layer': 'ГОСТ_Штамп_Текст',
-                'height': 2.5 * scale,
-                'style': 'ГОСТ_2.304',
-                'color': 7
-            }
-        ).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
+        msp.add_text(txt, dxfattribs={'layer': 'ГОСТ_Штамп_Текст', 'height': 2.5 * scale, 'style': 'ГОСТ_2.304', 'color': 7}).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
 
-    add_sm_txt("Изм.", 5.0, 32.5)
-    add_sm_txt("Кол.уч", 15.0, 32.5)
-    add_sm_txt("Лист", 25.0, 32.5)
-    add_sm_txt("№ док.", 35.0, 32.5)
-    add_sm_txt("Подп.", 47.5, 32.5)
-    add_sm_txt("Дата", 60.0, 32.5)
-
-    add_sm_txt("Разраб.", 10.0, 27.5)
-    add_sm_txt("Пров.", 10.0, 22.5)
-    add_sm_txt("Н. контр.", 10.0, 17.5)
-    add_sm_txt("ГИП", 10.0, 12.5)
-
-    add_sm_txt("Стадия", 142.5, 27.5)
-    add_sm_txt("Лист", 157.5, 27.5)
-    add_sm_txt("Листов", 175.0, 27.5)
+    for txt, cx, cy in [("Изм.",5,32.5),("Кол.уч",15,32.5),("Лист",25,32.5),("№ док.",35,32.5),("Подп.",47.5,32.5),("Дата",60,32.5),("Разраб.",10,27.5),("Пров.",10,22.5),("Н. контр.",10,17.5),("ГИП",10,12.5),("Стадия",142.5,27.5),("Лист",157.5,27.5),("Листов",175,27.5)]:
+        add_sm_txt(txt, cx, cy)
 
     sdata = stamp_data or {}
-
     def add_val_txt(txt, cx_mm, cy_mm, h_mm=2.5, align=TextEntityAlignment.MIDDLE_CENTER):
         if txt and str(txt).strip():
             clean_txt = str(txt).strip().replace(r'\P', '\n').replace(r'\p', '\n')
-            msp.add_text(
-                clean_txt,
-                dxfattribs={
-                    'layer': 'ГОСТ_Штамп_Текст',
-                    'height': h_mm * scale,
-                    'style': 'ГОСТ_2.304',
-                    'color': 7
-                }
-            ).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
+            msp.add_text(clean_txt, dxfattribs={'layer': 'ГОСТ_Штамп_Текст', 'height': h_mm * scale, 'style': 'ГОСТ_2.304', 'color': 7}).set_placement((x0 + cx_mm * scale, y0 + cy_mm * scale), align=align)
 
-    add_val_txt(sdata.get('doc_code', 'РД ГК № Т-100-23-ПП1.1'), 125.0, 50.0, h_mm=2.5)
-    add_val_txt(sdata.get('object_name', ''), 125.0, 37.5, h_mm=2.5)
-    add_val_txt(sdata.get('doc_subtitle', ''), 100.0, 22.5, h_mm=2.5)
-
-    add_val_txt(sdata.get('stage', 'ИД'), 142.5, 20.0, h_mm=2.5)
-    add_val_txt(sdata.get('sheet', '1'), 157.5, 20.0, h_mm=2.5)
-    add_val_txt(sdata.get('sheets_total', '1'), 175.0, 20.0, h_mm=2.5)
-
-    add_val_txt(sdata.get('doc_title', 'Исполнительная геодезическая схема'), 100.0, 7.5, h_mm=2.5)
-    add_val_txt(sdata.get('company_name', ''), 160.0, 7.5, h_mm=2.5)
-
-    add_val_txt(sdata.get('dev_name', ''), 30.0, 27.5, h_mm=2.5)
-    add_val_txt(sdata.get('check_name', ''), 30.0, 22.5, h_mm=2.5)
-    add_val_txt(sdata.get('norm_name', ''), 30.0, 17.5, h_mm=2.5)
-    add_val_txt(sdata.get('gip_name', ''), 30.0, 12.5, h_mm=2.5)
-
+    values = [('doc_code',125,50),('object_name',125,37.5),('doc_subtitle',100,22.5),('stage',142.5,20),('sheet',157.5,20),('sheets_total',175,20),('doc_title',100,7.5),('company_name',160,7.5),('dev_name',30,27.5),('check_name',30,22.5),('norm_name',30,17.5),('gip_name',30,12.5)]
+    defaults = {'doc_code':'РД ГК № Т-100-23-ПП1.1','stage':'ИД','sheet':'1','sheets_total':'1','doc_title':'Исполнительная геодезическая схема'}
+    for key, cx, cy in values:
+        add_val_txt(sdata.get(key, defaults.get(key,'')), cx, cy)
     if scale_str:
-        msp.add_text(
-            f"Масштаб {scale_str}",
-            dxfattribs={
-                'layer': 'ГОСТ_Штамп_Текст',
-                'height': 2.5 * scale,
-                'style': 'ГОСТ_2.304',
-                'color': 7
-            }
-        ).set_placement((x0, y1 + 4.0 * scale), align=TextEntityAlignment.BOTTOM_LEFT)
+        msp.add_text(f"Масштаб {scale_str}", dxfattribs={'layer':'ГОСТ_Штамп_Текст','height':2.5*scale,'style':'ГОСТ_2.304','color':7}).set_placement((x0,y1+4*scale),align=TextEntityAlignment.BOTTOM_LEFT)
 
 
 def draw_gost_frame_and_stamp(msp, bbox: BoundingBox, scale: float = 1.0, stamp_data: Optional[Dict[str, Any]] = None, scale_str: str = "1:100") -> Tuple[float, float, float, float]:
     setup_gost_layers(msp.doc)
 
     w_frame, h_frame = 420.0 * scale, 297.0 * scale
-    
-    # Center the frame around the geometry bbox, but shift it slightly down and right
-    # so the geometry sits in the upper-left area, freeing the bottom-right for the stamp and tables.
     if bbox.has_data:
-        cx = (bbox.extmin.x + bbox.extmax.x) / 2.0 + w_frame * 0.15
-        cy = (bbox.extmin.y + bbox.extmax.y) / 2.0 - h_frame * 0.15
+        # Deterministic A3 landscape frame: no centering heuristic and no
+        # fractional sheet offsets that could move the geometry outside the frame.
+        margin_left = 20.0 * scale
+        margin_bottom = 5.0 * scale
+        x_min = bbox.extmin.x - margin_left
+        y_min = bbox.extmin.y - margin_bottom
     else:
-        cx, cy = 0.0, 0.0
-        
-    x_min = cx - w_frame / 2.0
-    y_min = cy - h_frame / 2.0
+        x_min, y_min = 0.0, 0.0
+
     x_max = x_min + w_frame
     y_max = y_min + h_frame
 
-    msp.add_lwpolyline(
-        [(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)],
-        close=True,
-        dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
-    )
+    msp.add_lwpolyline([(x_min, y_min), (x_max, y_min), (x_max, y_max), (x_min, y_max)], close=True,
+                       dxfattribs={'layer':'ГОСТ_Рамка','color':7,'lineweight':50})
 
     in_x_min = x_min + 20.0 * scale
     in_y_min = y_min + 5.0 * scale
     in_x_max = x_max - 5.0 * scale
     in_y_max = y_max - 5.0 * scale
-
-    msp.add_lwpolyline(
-        [(in_x_min, in_y_min), (in_x_max, in_y_min), (in_x_max, in_y_max), (in_x_min, in_y_max)],
-        close=True,
-        dxfattribs={'layer': 'ГОСТ_Рамка', 'color': 7, 'lineweight': 50}
-    )
+    msp.add_lwpolyline([(in_x_min,in_y_min),(in_x_max,in_y_min),(in_x_max,in_y_max),(in_x_min,in_y_max)], close=True,
+                       dxfattribs={'layer':'ГОСТ_Рамка','color':7,'lineweight':50})
 
     stamp_x0 = in_x_max - STAMP_WIDTH * scale
     stamp_y0 = in_y_min
-
     draw_gost_stamp(msp, stamp_x0, stamp_y0, scale=scale, stamp_data=stamp_data, scale_str=scale_str)
-
     return in_x_min, in_y_min, in_x_max, in_y_max
