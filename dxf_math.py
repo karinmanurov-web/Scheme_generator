@@ -12,8 +12,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
+import ezdxf
+from ezdxf.math import BoundingBox, Matrix44
+
 A3_W_MM = 420.0
 A3_H_MM = 297.0
+A3_WIDTH_MM = A3_W_MM
+A3_HEIGHT_MM = A3_H_MM
 FRAME_MARGIN_MM = 10.0
 STAMP_W_MM = 185.0
 STAMP_H_MM = 55.0
@@ -44,6 +49,39 @@ def unit_to_mm_from_doc(doc) -> float:
     return UNIT_TO_MM.get(units, 1.0)
 
 
+def normalize_to_mm(doc) -> float:
+    """Normalize modelspace coordinates to millimetres exactly once.
+
+    The function is deliberately idempotent: after conversion the DXF unit
+    header is set to millimetres, so repeated calls do not rescale geometry.
+    Entities that cannot be transformed are left untouched rather than making
+    the whole conversion fail.
+    """
+    factor = unit_to_mm_from_doc(doc)
+    if abs(factor - 1.0) < 1e-12:
+        try:
+            doc.header["$INSUNITS"] = 4
+        except Exception:
+            pass
+        return 1.0
+
+    transform = Matrix44.scale(factor, factor, 1.0)
+    for layout in doc.layouts:
+        for entity in list(layout):
+            try:
+                entity.transform(transform)
+            except Exception:
+                # Some annotation/proxy entities cannot be transformed by
+                # ezdxf. Their raw coordinates are retained for compatibility.
+                continue
+    try:
+        doc.header["$INSUNITS"] = 4
+        doc.header["$MEASUREMENT"] = 1
+    except Exception:
+        pass
+    return factor
+
+
 def to_mm_xy(point: Sequence[float], unit_factor: float) -> Tuple[float, float]:
     return float(point[0]) * unit_factor, float(point[1]) * unit_factor
 
@@ -69,6 +107,13 @@ def fit_standard_scale(width_mm: float, height_mm: float, usable_width_mm: float
     return ScalePlan(denominator, 1.0 / denominator, width_mm, height_mm, usable_width_mm, usable_height_mm)
 
 
+def choose_standard_scale(width_mm: float, height_mm: float, usable_width_mm: float = None, usable_height_mm: float = None) -> float:
+    """Compatibility API returning only the denominator N for 1:N."""
+    if usable_width_mm is None or usable_height_mm is None:
+        usable_width_mm, usable_height_mm = a3_work_area()
+    return fit_standard_scale(width_mm, height_mm, usable_width_mm, usable_height_mm).denominator
+
+
 def fit_standard_scale_for_bbox(bbox: Sequence[float], usable_width_mm: float | None = None, usable_height_mm: float | None = None, scales: Iterable[float] = STANDARD_SCALES) -> ScalePlan:
     width, height = bbox_size(bbox)
     if usable_width_mm is None or usable_height_mm is None:
@@ -90,11 +135,23 @@ def bbox_from_points(points: Iterable[Sequence[float]]) -> Tuple[float, float, f
 
 
 def bbox_size(bbox: Sequence[float]) -> Tuple[float, float]:
+    if hasattr(bbox, "extmin") and hasattr(bbox, "extmax"):
+        return max(0.0, float(bbox.extmax.x - bbox.extmin.x)), max(0.0, float(bbox.extmax.y - bbox.extmin.y))
     return max(0.0, float(bbox[2]) - float(bbox[0])), max(0.0, float(bbox[3]) - float(bbox[1]))
+
+
+def bbox_mm(bbox) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+    if not bbox.has_data:
+        raise ValueError("Cannot calculate bbox of empty geometry")
+    return (float(bbox.extmin.x), float(bbox.extmin.y)), (float(bbox.extmax.x), float(bbox.extmax.y))
 
 
 def scaled_length(length_mm: float, factor: float) -> float:
     return float(length_mm) * float(factor)
+
+
+def scale_geometry_value(value: float, factor: float) -> float:
+    return float(value) * float(factor)
 
 
 def paper_point_from_source(point_mm: Sequence[float], source_bbox: Sequence[float], plan: ScalePlan, origin_mm: Sequence[float]) -> Tuple[float, float]:
