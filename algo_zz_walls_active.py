@@ -27,6 +27,7 @@ INNER_LEFT = 20.0
 INNER_BOTTOM = 5.0
 INNER_RIGHT = 5.0
 INNER_TOP = 5.0
+STAMP_WIDTH = 185.0
 
 
 def _geometry_bbox(elements):
@@ -94,6 +95,50 @@ def _scale_dim(dim: Dict[str, Any], factor: float) -> Dict[str, Any]:
     return result
 
 
+def _draw_level_deterministic(msp, lvl_info: Dict[str, Any]) -> None:
+    """Paper-space level marker; no invented/random survey deviation."""
+    pt, value = lvl_info["pt"], lvl_info["val"]
+    th, tri_w, tri_h, shelf_w = 2.5, 1.5, 1.5, 8.0
+    base_y = pt[1] - 0.5
+    msp.add_lwpolyline([(pt[0], base_y), (pt[0] - tri_w, base_y + tri_h),
+                        (pt[0] + tri_w, base_y + tri_h)], close=True,
+                       dxfattribs={"layer": "ГОСТ_Отметки", "color": 7})
+    msp.add_line((pt[0] - tri_w, base_y + tri_h),
+                 (pt[0] + shelf_w, base_y + tri_h),
+                 dxfattribs={"layer": "ГОСТ_Отметки", "color": 7})
+    text = f"{value:+.3f}"
+    msp.add_text(text, dxfattribs={"style": "ГОСТ_Шрифт", "height": th,
+                                   "layer": "ГОСТ_Отметки", "color": 7}).set_placement(
+        (pt[0] + 0.5, base_y + tri_h + 0.5), align=TextEntityAlignment.BOTTOM_LEFT)
+
+
+def _draw_dimension_deterministic(msp, dim_info: Dict[str, Any]) -> None:
+    """Draw project dimension only; actual value is never fabricated."""
+    import math
+    p1, p2, p_dim = dim_info["p1"], dim_info["p2"], dim_info["p_dim"]
+    angle = dim_info["angle_rad"]
+    value = dim_info["prj_val"]
+    dx, dy = math.cos(angle), math.sin(angle)
+    px, py = -dy, dx
+    distance1 = (p_dim[0] - p1[0]) * px + (p_dim[1] - p1[1]) * py
+    distance2 = (p_dim[0] - p2[0]) * px + (p_dim[1] - p2[1]) * py
+    i1 = (p1[0] + distance1 * px, p1[1] + distance1 * py)
+    i2 = (p2[0] + distance2 * px, p2[1] + distance2 * py)
+    ext = 1.5
+    msp.add_line(p1, (i1[0] + math.copysign(ext * px, distance1), i1[1] + math.copysign(ext * py, distance1)),
+                 dxfattribs={"layer": "ГОСТ_Размеры_Проект", "color": 7})
+    msp.add_line(p2, (i2[0] + math.copysign(ext * px, distance2), i2[1] + math.copysign(ext * py, distance2)),
+                 dxfattribs={"layer": "ГОСТ_Размеры_Проект", "color": 7})
+    msp.add_line((i1[0] - ext * dx, i1[1] - ext * dy), (i2[0] + ext * dx, i2[1] + ext * dy),
+                 dxfattribs={"layer": "ГОСТ_Размеры_Проект", "color": 7})
+    mx, my = (i1[0] + i2[0]) / 2, (i1[1] + i2[1]) / 2
+    text = f"{int(round(value))}" if value >= 10 else f"{value:.2f}"
+    msp.add_text(text, dxfattribs={"style": "ГОСТ_Шрифт", "height": 2.5,
+                                   "layer": "ГОСТ_Размеры_Проект", "color": 7,
+                                   "rotation": math.degrees(angle) % 180}).set_placement(
+        (mx + 2.0 * px, my + 2.0 * py), align=TextEntityAlignment.MIDDLE_CENTER)
+
+
 def run(input_dxf: str, output_dxf: str, output_csv: Optional[str] = None,
         log_callback=None, stamp_data: Optional[Dict[str, Any]] = None,
         table_data: Optional[List[Dict[str, Any]]] = None) -> None:
@@ -101,7 +146,6 @@ def run(input_dxf: str, output_dxf: str, output_csv: Optional[str] = None,
     unit_factor = _unit_to_mm(src)
     elements, dims, levels = extract_valid_geometry(src.modelspace(), src)
 
-    # Convert source coordinates to millimetres before deciding the sheet scale.
     elements_mm = []
     for item in elements:
         if item[0] == "LINE":
@@ -136,48 +180,47 @@ def run(input_dxf: str, output_dxf: str, output_csv: Optional[str] = None,
     scale_denominator = _fit_scale(geom_w, geom_h)
     drawing_factor = 1.0 / scale_denominator
 
-    # Normalize origin first, then apply the actual engineering drawing scale.
     pad_mm = min(max(geom_w, geom_h) * 0.02, 20.0)
-    dx = -min_x + pad_mm
-    dy = -min_y + pad_mm
+    dx, dy = -min_x + pad_mm, -min_y + pad_mm
     scaled_elements = [_scale_element(item, drawing_factor, dx, dy) for item in elements_mm]
     scaled_dims = [_scale_dim(d, drawing_factor) for d in dims_mm]
     scaled_levels = []
     for level in levels_mm:
         d = dict(level)
-        d["pt"] = (level["pt"][0] * drawing_factor + dx * drawing_factor,
-                    level["pt"][1] * drawing_factor + dy * drawing_factor)
+        d["pt"] = ((level["pt"][0] + dx) * drawing_factor,
+                    (level["pt"][1] + dy) * drawing_factor)
         scaled_levels.append(d)
 
     out = ezdxf.new("R2018", setup=True)
     out = setup_document(out)
     msp = out.modelspace()
     _draw_elements(msp, scaled_elements)
-
     if not ezdxf_bbox.extents(msp).has_data:
         raise RuntimeError("Пустая исполнительная геометрия после очистки")
 
-    # Annotation sizes are physical paper sizes; they must NOT be multiplied by 1:scale.
-    annotation_scale = 1.0
     for dim in scaled_dims:
-        draw_fractional_dimension(msp, dim, scale=annotation_scale)
+        _draw_dimension_deterministic(msp, dim)
     for level in scaled_levels:
-        draw_level_mark(msp, level, scale=annotation_scale)
+        _draw_level_deterministic(msp, level)
 
     drawing_box = ezdxf_bbox.extents(msp)
     scale_str = f"1:{int(scale_denominator)}"
     in_x_min, in_y_min, in_x_max, in_y_max = draw_gost_frame_and_stamp(
-        msp, drawing_box, scale=annotation_scale, stamp_data=stamp_data, scale_str=scale_str)
+        msp, drawing_box, scale=1.0, stamp_data=stamp_data, scale_str=scale_str)
 
     stamp_top = in_y_min + STAMP_HEIGHT
+    stamp_left = in_x_max - STAMP_WIDTH
     chrome_left = in_x_min + 2.0
-    notes_top = stamp_top + 26.0
+    available_table_w = max(0.0, stamp_left - chrome_left - 3.0)
+    table_scale = min(1.0, available_table_w / 230.0) if available_table_w else 0.8
+    table_scale = max(table_scale, 0.75)
     table_top = stamp_top - 2.0
+    notes_top = in_y_max - 12.0
 
     L, B, area = analyze_wall_geometry(elements_mm)
     draw_quantities_table(msp, (chrome_left, table_top), L=L, B=B, area=area,
-                          scale=annotation_scale, table_data=table_data)
-    draw_legend_and_notes(msp, (chrome_left, notes_top), scale=annotation_scale,
+                          scale=table_scale, table_data=table_data)
+    draw_legend_and_notes(msp, (chrome_left, notes_top), scale=1.0,
                           custom_notes=((stamp_data or {}).get("_notes_data") or {}).get("notes"))
 
     title = ((stamp_data or {}).get("doc_title") or "ИСПОЛНИТЕЛЬНАЯ СХЕМА. ОТКОСНЫЕ СТЕНКИ").upper()
