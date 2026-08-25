@@ -23,8 +23,6 @@ from algo_piles import draw_notes_and_legend, STANDARD_SCALES
 from algo_stamp import draw_gost_frame_and_stamp, setup_gost_layers
 from piles_sheet_layout import build_sheet_plan
 
-ALGORITHM_NAME = _struct.ALGORITHM_NAME
-PREVIEW_IMAGE = _struct.PREVIEW_IMAGE
 generate_table_data = _struct.generate_table_data
 process_dxf_to_asbuilt_scheme = _struct.process_dxf_to_asbuilt_scheme
 
@@ -116,8 +114,6 @@ def _rebuild_presentation(doc, stamp_data, log_callback=None):
 
     frame_box = _bbox_for_layers(msp, {"ГОСТ_Рамка"})
     if frame_box and frame_box.has_data:
-        # Keep notes outside the stamp, but do not alter the legacy frame
-        # placement until the three-sheet layout is implemented properly.
         notes_x = frame_box.extmin.x + 10.0 * scale
         notes_y = frame_box.extmin.y + 60.0 * scale
         draw_notes_and_legend(msp, notes_x, notes_y, scale=scale)
