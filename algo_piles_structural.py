@@ -25,6 +25,7 @@ _PILE_OUTPUT_LAYERS = {"Сваи_Проект", "Оси_Проект", "Испо
 _COMPACT_CROSS_LENGTH = 500.0
 _MIN_EXECUTION_DIMENSION = 100.0
 _GRILLAGE_LAYER = "Исполнительная_Ростверк"
+_ORIGINAL_EXTRACT_SOURCE_DIMENSIONS = _base._piles.extract_source_dimensions
 
 
 def _entity_center(entity):
@@ -273,7 +274,7 @@ def _shrink_pile_axes(doc, log=None):
 
 
 def _dimension_filter(msp):
-    dimensions = _base._piles.extract_source_dimensions(msp)
+    dimensions = _ORIGINAL_EXTRACT_SOURCE_DIMENSIONS(msp)
     return [item for item in dimensions if float(item.get("prj_val", 0)) >= _MIN_EXECUTION_DIMENSION]
 
 
