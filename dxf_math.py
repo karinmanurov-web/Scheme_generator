@@ -14,6 +14,9 @@ from typing import Iterable, Sequence, Tuple
 
 A3_W_MM = 420.0
 A3_H_MM = 297.0
+FRAME_MARGIN_MM = 10.0
+STAMP_W_MM = 185.0
+STAMP_H_MM = 55.0
 STANDARD_SCALES = (1, 2, 5, 10, 15, 20, 25, 40, 50, 75, 100, 150, 200, 250, 400, 500, 1000)
 
 UNIT_TO_MM = {
@@ -45,18 +48,13 @@ def to_mm_xy(point: Sequence[float], unit_factor: float) -> Tuple[float, float]:
     return float(point[0]) * unit_factor, float(point[1]) * unit_factor
 
 
-def fit_standard_scale(
-    width_mm: float,
-    height_mm: float,
-    usable_width_mm: float,
-    usable_height_mm: float,
-    scales: Iterable[float] = STANDARD_SCALES,
-) -> ScalePlan:
-    """Return the first standard 1:N scale whose paper geometry fits.
+def a3_work_area(frame_margin_mm: float = FRAME_MARGIN_MM, stamp_h_mm: float = STAMP_H_MM, top_margin_mm: float = 8.0, gap_mm: float = 5.0) -> Tuple[float, float]:
+    width = A3_W_MM - 2.0 * frame_margin_mm - gap_mm
+    height = A3_H_MM - 2.0 * frame_margin_mm - stamp_h_mm - top_margin_mm
+    return max(width, 1.0), max(height, 1.0)
 
-    A drawing that exceeds the largest configured scale is rejected instead of
-    silently producing an out-of-frame drawing.
-    """
+
+def fit_standard_scale(width_mm: float, height_mm: float, usable_width_mm: float, usable_height_mm: float, scales: Iterable[float] = STANDARD_SCALES) -> ScalePlan:
     width_mm = max(0.0, float(width_mm))
     height_mm = max(0.0, float(height_mm))
     usable_width_mm = max(1e-9, float(usable_width_mm))
@@ -67,29 +65,19 @@ def fit_standard_scale(
         raise ValueError("No valid drawing scales configured")
     denominator = next((s for s in ordered if s >= required), None)
     if denominator is None:
-        raise ValueError(
-            f"Geometry {width_mm:.1f}x{height_mm:.1f} mm does not fit "
-            f"the usable sheet area even at 1:{ordered[-1]:g}"
-        )
-    return ScalePlan(denominator, 1.0 / denominator, width_mm, height_mm,
-                     usable_width_mm, usable_height_mm)
+        raise ValueError(f"Geometry {width_mm:.1f}x{height_mm:.1f} mm does not fit the usable sheet area even at 1:{ordered[-1]:g}")
+    return ScalePlan(denominator, 1.0 / denominator, width_mm, height_mm, usable_width_mm, usable_height_mm)
 
 
-def translate_and_scale_xy(
-    point: Sequence[float],
-    min_x: float,
-    min_y: float,
-    factor: float,
-    padding_mm: float = 0.0,
-) -> Tuple[float, float]:
-    """Convert source mm coordinates to paper mm coordinates.
+def fit_standard_scale_for_bbox(bbox: Sequence[float], usable_width_mm: float | None = None, usable_height_mm: float | None = None, scales: Iterable[float] = STANDARD_SCALES) -> ScalePlan:
+    width, height = bbox_size(bbox)
+    if usable_width_mm is None or usable_height_mm is None:
+        usable_width_mm, usable_height_mm = a3_work_area()
+    return fit_standard_scale(width, height, usable_width_mm, usable_height_mm, scales)
 
-    Padding is a paper-space margin and therefore is added *after* scaling.
-    """
-    return (
-        (float(point[0]) - min_x) * float(factor) + float(padding_mm),
-        (float(point[1]) - min_y) * float(factor) + float(padding_mm),
-    )
+
+def translate_and_scale_xy(point: Sequence[float], min_x: float, min_y: float, factor: float, padding_mm: float = 0.0) -> Tuple[float, float]:
+    return ((float(point[0]) - min_x) * float(factor) + float(padding_mm), (float(point[1]) - min_y) * float(factor) + float(padding_mm))
 
 
 def bbox_from_points(points: Iterable[Sequence[float]]) -> Tuple[float, float, float, float]:
@@ -109,14 +97,5 @@ def scaled_length(length_mm: float, factor: float) -> float:
     return float(length_mm) * float(factor)
 
 
-def paper_point_from_source(
-    point_mm: Sequence[float],
-    source_bbox: Sequence[float],
-    plan: ScalePlan,
-    origin_mm: Sequence[float],
-) -> Tuple[float, float]:
-    """Map a source-mm point into paper-mm coordinates."""
-    return (
-        float(origin_mm[0]) + (float(point_mm[0]) - float(source_bbox[0])) * plan.factor,
-        float(origin_mm[1]) + (float(point_mm[1]) - float(source_bbox[1])) * plan.factor,
-    )
+def paper_point_from_source(point_mm: Sequence[float], source_bbox: Sequence[float], plan: ScalePlan, origin_mm: Sequence[float]) -> Tuple[float, float]:
+    return (float(origin_mm[0]) + (float(point_mm[0]) - float(source_bbox[0])) * plan.factor, float(origin_mm[1]) + (float(point_mm[1]) - float(source_bbox[1])) * plan.factor)
