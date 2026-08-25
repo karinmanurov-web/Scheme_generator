@@ -2,84 +2,95 @@ from __future__ import annotations
 
 import math
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
+
+UNIT_TO_MM = {
+    0: 1.0, 1: 25.4, 2: 304.8, 3: 1609344.0, 4: 1.0, 5: 10.0,
+    6: 1000.0, 7: 1000000.0, 8: 0.0000254, 9: 0.0254, 10: 914.4,
+    14: 100.0, 15: 10000.0, 16: 100000.0, 17: 1000000.0,
+}
+
+_PRESENTATION_TYPES = {"HATCH", "WIPEOUT", "IMAGE", "IMAGEDEF", "SOLID", "3DFACE"}
 
 
 def unit_to_mm(doc) -> float:
-    units = int(doc.header.get("$INSUNITS", 4) or 4)
-    return {1:25.4, 2:304.8, 3:1609344.0, 4:1.0, 5:10.0, 6:1000.0,
-            7:1000000.0, 10:914.4, 14:100.0, 15:10000.0,
-            16:100000.0, 17:1000000.0}.get(units, 1.0)
+    try:
+        units = int(doc.header.get("$INSUNITS", 0) or 0)
+    except Exception:
+        units = 0
+    return UNIT_TO_MM.get(units, 1.0)
 
 
 def _green(entity) -> bool:
     try:
-        c = int(entity.dxf.color)
-        if c == 3:
-            return True
+        return int(entity.dxf.color) == 3
     except Exception:
-        pass
-    return False
+        return False
 
 
 def _skip(entity) -> bool:
-    if entity.dxftype() in {"HATCH", "WIPEOUT", "IMAGE", "IMAGEDEF", "SOLID", "3DFACE"}:
-        return True
-    if _green(entity):
-        return True
-    layer = str(getattr(entity.dxf, "layer", "")).lower()
-    return any(k in layer for k in ("defpoints", "штамп", "рамка", "frame", "stamp", "title"))
+    # Filter presentation-only entities and explicit green construction geometry.
+    # Do not filter by source layer/block names: those are project-specific.
+    return entity.dxftype() in _PRESENTATION_TYPES or _green(entity)
 
 
 def _text_value(text: str):
     text = re.sub(r"\\[A-Za-z0-9]+;?", "", text or "")
-    m = re.search(r"[+-]?\d+[\.,]\d+", text)
+    m = re.search(r"[+-]?\d+(?:[\.,]\d+)?", text)
     return float(m.group(0).replace(",", ".")) if m else None
+
+
+def _polyline_points(entity, factor: float):
+    if entity.dxftype() == "LWPOLYLINE":
+        # Preserve bulge for downstream consumers instead of flattening arcs away.
+        return [
+            (float(p[0]) * factor, float(p[1]) * factor, float(p[4]) if len(p) > 4 else 0.0)
+            for p in entity.get_points("xyseb")
+        ]
+    return [
+        (float(v.dxf.location.x) * factor, float(v.dxf.location.y) * factor, 0.0)
+        for v in entity.vertices
+    ]
 
 
 def _transform_entity(entity, unit_factor: float):
     t = entity.dxftype()
-    layer = str(getattr(entity.dxf, "layer", ""))
-    target = "ГОСТ_Контур_Толстый"
-    low = layer.lower()
-    if any(k in low for k in ("оси", "axis", "center")):
-        target = "ГОСТ_Оси"
-    elif any(k in low for k in ("пунктир", "тонкие", "thin", "dash")):
-        target = "ГОСТ_Контур_Тонкий"
-
     if t == "LINE":
         return [("LINE", (entity.dxf.start.x*unit_factor, entity.dxf.start.y*unit_factor),
-                 (entity.dxf.end.x*unit_factor, entity.dxf.end.y*unit_factor), target)]
+                 (entity.dxf.end.x*unit_factor, entity.dxf.end.y*unit_factor))]
     if t == "CIRCLE":
         return [("CIRCLE", (entity.dxf.center.x*unit_factor, entity.dxf.center.y*unit_factor),
-                 entity.dxf.radius*unit_factor, target)]
+                 entity.dxf.radius*unit_factor)]
     if t == "ARC":
         return [("ARC", (entity.dxf.center.x*unit_factor, entity.dxf.center.y*unit_factor),
                  entity.dxf.radius*unit_factor, float(entity.dxf.start_angle),
-                 float(entity.dxf.end_angle), target)]
+                 float(entity.dxf.end_angle))]
     if t in {"LWPOLYLINE", "POLYLINE"}:
-        pts = []
-        for v in entity.get_points("xy") if t == "LWPOLYLINE" else entity.vertices:
-            p = (v[0]*unit_factor, v[1]*unit_factor) if t == "LWPOLYLINE" else (v.dxf.location.x*unit_factor, v.dxf.location.y*unit_factor)
-            pts.append(p)
-        return [("POLYLINE", pts, bool(getattr(entity, "closed", False) or getattr(entity, "is_closed", False)), target)] if len(pts) >= 2 else []
+        pts = _polyline_points(entity, unit_factor)
+        closed = bool(getattr(entity.dxf, "flags", 0) & 1) if t == "POLYLINE" else bool(getattr(entity, "closed", False))
+        return [("POLYLINE", pts, closed)] if len(pts) >= 2 else []
     return []
 
 
 def extract_geometry(source_msp, source_doc):
+    """Extract geometry, dimensions and levels in millimetres.
+
+    INSERTs are recursively expanded. Geometry is normalized to mm before any
+    sheet scaling. Source layer/block names are intentionally ignored.
+    """
     elements: List[Any] = []
     dims: List[Dict[str, Any]] = []
     levels: List[Dict[str, Any]] = []
     factor = unit_to_mm(source_doc)
 
-    def visit(entity):
-        if _skip(entity):
+    def visit(entity, depth=0):
+        if depth > 8 or _skip(entity):
             return
         t = entity.dxftype()
         if t == "INSERT":
             try:
                 for sub in entity.virtual_entities():
-                    visit(sub)
+                    visit(sub, depth + 1)
             except Exception:
                 return
             return
@@ -95,15 +106,22 @@ def extract_geometry(source_msp, source_doc):
                 p1, p2, pd = entity.dxf.defpoint2, entity.dxf.defpoint3, entity.dxf.defpoint
                 dx, dy = p2.x-p1.x, p2.y-p1.y
                 angle = math.atan2(dy, dx)
-                dist = math.hypot(dx, dy)*factor
+                dist = math.hypot(dx, dy) * factor
                 text = getattr(entity.dxf, "text", "")
                 val = _text_value(text)
                 if val is None:
                     val = dist
-                else:
+                elif factor != 1.0:
+                    # Explicit dimension text is normally already expressed in drawing units;
+                    # normalize it only when source units are not mm.
                     val *= factor
-                dims.append({"p1":(p1.x*factor,p1.y*factor), "p2":(p2.x*factor,p2.y*factor),
-                             "p_dim":(pd.x*factor,pd.y*factor), "angle_rad":angle, "prj_val":val})
+                dims.append({
+                    "p1": (p1.x*factor, p1.y*factor),
+                    "p2": (p2.x*factor, p2.y*factor),
+                    "p_dim": (pd.x*factor, pd.y*factor),
+                    "angle_rad": angle,
+                    "prj_val": val,
+                })
             except Exception:
                 pass
             return
