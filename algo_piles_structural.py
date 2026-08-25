@@ -16,8 +16,6 @@ from ezdxf.math import Matrix44
 import algo_piles_fixed as _base
 from grillage_detector import collect_world_segments, detect_grillage, infer_pile_axis
 
-ALGORITHM_NAME = _base.ALGORITHM_NAME
-PREVIEW_IMAGE = _base.PREVIEW_IMAGE
 generate_table_data = _base.generate_table_data
 process_dxf_to_asbuilt_scheme = _base.process_dxf_to_asbuilt_scheme
 
@@ -262,7 +260,7 @@ def _shrink_pile_axes(doc, log=None):
             nearest, distance = _nearest(midpoint, centers)
             if nearest is None or distance > 100:
                 continue
-            ux, uy = (end[0]-start[0])/length, (end[1]-start[1])/length
+            ux, uy = (end[0]-start[0])/length, (end[1]-start[0])/length
             entity.dxf.start = (nearest[0]-ux*half, nearest[1]-uy*half, 0)
             entity.dxf.end = (nearest[0]+ux*half, nearest[1]+uy*half, 0)
             changed += 1
@@ -277,8 +275,6 @@ def _dimension_filter(msp):
     dimensions = _ORIGINAL_EXTRACT_SOURCE_DIMENSIONS(msp)
     return [item for item in dimensions if float(item.get("prj_val", 0)) >= _MIN_EXECUTION_DIMENSION]
 
-
-# Compatibility names used by the structural regression tests.
 _source_pile_axes = lambda doc: [(item["center"], item["angle"]) for item in _source_pile_orientations(doc)]
 _remove_hatches = _remove_all_hatches
 _shrink_axes = _shrink_pile_axes
