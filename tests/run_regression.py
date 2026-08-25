@@ -22,7 +22,7 @@ from typing import Any
 
 try:
     import yaml
-except ImportError as exc:  # pragma: no cover - user-facing dependency error
+except ImportError as exc:
     raise SystemExit("PyYAML is required: pip install -r tests/requirements.txt") from exc
 
 from evaluator import evaluate_manifest, evaluation_to_dict
@@ -35,7 +35,6 @@ REPORTS = ROOT / "reports"
 
 
 def decode_github_unicode_path(value: str) -> str:
-    """Decode #U0410-style paths created by older manifest tooling."""
     pattern = re.compile(r"#U([0-9A-Fa-f]{4})")
     return pattern.sub(lambda m: chr(int(m.group(1), 16)), value)
 
@@ -48,7 +47,6 @@ def resolve_path(value: str | None) -> Path | None:
 
 
 def fallback_fixture_file(manifest_path: Path, suffix: str, search_dir: Path | None = None) -> Path | None:
-    """Find a unique fixture file when a manifest path is stale or names changed."""
     candidates: list[Path] = []
     if search_dir and search_dir.exists():
         candidates.extend(sorted(search_dir.glob(f"*{suffix}")))
@@ -292,6 +290,9 @@ def main() -> int:
         diagnostics = evaluation.get("diagnostics", {})
         if diagnostics:
             print(f"     bbox={diagnostics.get('modelspace_bbox')} frame={diagnostics.get('frame_bbox')} ratio={diagnostics.get('model_to_frame_area_ratio')}")
+        failed_checks = [f"{c.get('id')}: {c.get('details', '')}" for c in evaluation.get('checks', []) if c.get('status') == 'FAIL']
+        if failed_checks:
+            print(f"     failed_checks={'; '.join(failed_checks)}")
         failed = failed or not ok
     return 1 if failed else 0
 
