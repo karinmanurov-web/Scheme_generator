@@ -7,6 +7,10 @@ from algo_cones import detect_cones, generate_table_data, process_dxf_to_asbuilt
 
 def _make_fixture(path: Path) -> None:
     doc = ezdxf.new("R2018")
+    # Fixture coordinates represent millimetres. ezdxf's R2018 template
+    # defaults $INSUNITS to metres, so declare the fixture units explicitly.
+    doc.header["$INSUNITS"] = 4
+    doc.header["$MEASUREMENT"] = 1
     msp = doc.modelspace()
     msp.add_circle((1000, 1000), 250)
     msp.add_circle((2500, 1200), 300)
