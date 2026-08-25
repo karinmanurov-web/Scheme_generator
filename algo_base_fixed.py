@@ -1,7 +1,7 @@
 """Compatibility wrapper for the Подбетонка algorithm.
 
 The original algorithm calculates the sheet scale from construction primitives,
-but its final frame bounds are calculated separately.  Keep those two
+but its final frame bounds are calculated separately. Keep those two
 calculations on the same geometry-only basis so annotations/HATCH/INSERT
 artifacts cannot make the sheet scale and frame disagree.
 """
@@ -10,12 +10,8 @@ import algo_base as _base
 import ezdxf
 from ezdxf import bbox as ezdxf_bbox
 
-ALGORITHM_NAME = _base.ALGORITHM_NAME
-PREVIEW_IMAGE = getattr(_base, "PREVIEW_IMAGE", "preview_base.png")
-
 generate_table_data = _base.generate_table_data
 
-# Keep the original implementation private while the wrapper is active.
 _ORIGINAL_CALCULATE_BOUNDS = _base.calculate_bounds
 _ORIGINAL_SAFE_EXTENTS = _base.safe_extents
 
